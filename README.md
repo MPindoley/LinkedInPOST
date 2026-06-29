@@ -39,13 +39,25 @@ npm install
 npm run dev
 ```
 
-### API access
+Then open the local URL it prints (usually http://localhost:5173).
 
-The generate call posts to `https://api.anthropic.com/v1/messages`.
+### API access (OpenAI)
 
-- In hosted environments that inject auth, it works as-is.
-- For local development, copy `.env.example` to `.env` and set
-  `VITE_ANTHROPIC_API_KEY`. The app then authorizes the browser call directly.
+This app uses **OpenAI only**. The generate call posts directly to
+`https://api.openai.com/v1/chat/completions` from your browser.
+
+1. Paste your OpenAI API key into the **OpenAI API key** field at the top of
+   the studio. It is stored only in your browser (`localStorage`) and is sent
+   only to OpenAI.
+2. Pick a model (`gpt-4o-mini` for fast/cheap, `gpt-4o` for higher quality).
+3. Generate.
+
+Optional: instead of pasting the key each time, copy `.env.example` to `.env`
+and set `VITE_OPENAI_API_KEY` to pre-fill the field on load.
+
+> Note: the key lives in the browser because this is a local, single-user tool.
+> Do not deploy it publicly with a real key embedded; for a shared deployment,
+> proxy the OpenAI call through a small backend instead.
 
 ## Source
 

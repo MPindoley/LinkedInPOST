@@ -37,6 +37,14 @@ const TONES = ["Educator", "Conversational", "Bold but careful"];
 const LEN_LABELS = ["Short", "Standard", "Long", "Max"];
 const LEN_WORDS = [80, 150, 230, 300];
 
+// OpenAI only. Pick the model used for drafting. gpt-4o-mini is fast and cheap;
+// gpt-4o is higher quality. You can add any chat model id your key can access.
+const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+const OPENAI_MODELS = [
+  { id: "gpt-4o-mini", label: "4o mini" },
+  { id: "gpt-4o", label: "4o" },
+];
+
 // Three restrained palettes. One palette runs across the whole carousel so the
 // set looks authored, not auto-generated. Each defines a calm cover/close
 // variant so slides 1 and 5 frame the set without breaking cohesion.
@@ -358,7 +366,20 @@ export default function ContentDesk() {
   const [copied, setCopied] = useState("");
   const [editDisc, setEditDisc] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
+  const [modelId, setModelId] = useState("gpt-4o-mini");
+  const [apiKey, setApiKey] = useState(() => {
+    try {
+      const stored = localStorage.getItem("openai_api_key");
+      if (stored) return stored;
+      return (import.meta.env && import.meta.env.VITE_OPENAI_API_KEY) || "";
+    } catch (e) { return ""; }
+  });
   const canvasRef = useRef(null);
+
+  function saveKey(v) {
+    setApiKey(v);
+    try { localStorage.setItem("openai_api_key", v); } catch (e) {}
+  }
 
   const pillar = PILLARS.find((p) => p.id === pillarId);
   const liveTopic = topic.trim();
@@ -397,38 +418,47 @@ export default function ContentDesk() {
   }, [view, slide, result, fontsReady, drawOpts]);
 
   async function generate() {
+    if (!apiKey.trim()) {
+      setError("Add your OpenAI API key above to generate.");
+      return;
+    }
     setLoading(true); setError(""); setResult(null); setSlide(0); setView("post");
     try {
       const userMsg = liveTopic
         ? `Topic / angle to use: "${liveTopic}". Generate the ${pillar.label} post and carousel around this.`
         : `No topic given, choose a fresh interesting one yourself. Generate the ${pillar.label} post and carousel.`;
-      const headers = { "Content-Type": "application/json" };
-      // Works as-is inside hosted environments that inject auth. For local dev,
-      // set VITE_ANTHROPIC_API_KEY and the browser call is authorized directly.
-      let key = "";
-      try { key = import.meta.env.VITE_ANTHROPIC_API_KEY || ""; } catch (e) {}
-      if (key) {
-        headers["x-api-key"] = key;
-        headers["anthropic-version"] = "2023-06-01";
-        headers["anthropic-dangerous-direct-browser-access"] = "true";
-      }
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      // OpenAI Chat Completions, called directly from the browser with your key.
+      const response = await fetch(OPENAI_ENDPOINT, {
         method: "POST",
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + apiKey.trim(),
+        },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1000,
-          system: buildSystemPrompt(pillar, tone, LEN_WORDS[lenIdx], LEN_LABELS[lenIdx]),
-          messages: [{ role: "user", content: userMsg }],
+          model: modelId,
+          temperature: 0.8,
+          max_tokens: 1200,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: buildSystemPrompt(pillar, tone, LEN_WORDS[lenIdx], LEN_LABELS[lenIdx]) },
+            { role: "user", content: userMsg },
+          ],
         }),
       });
+      if (!response.ok) {
+        let detail = "";
+        try { detail = (await response.json())?.error?.message || ""; } catch (e) {}
+        if (response.status === 401) throw new Error("Your OpenAI API key was rejected (401). Check the key.");
+        if (response.status === 429) throw new Error("OpenAI rate limit or quota reached (429). " + detail);
+        throw new Error("OpenAI error " + response.status + ". " + detail);
+      }
       const data = await response.json();
-      const raw = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+      const raw = data.choices?.[0]?.message?.content || "";
       const cleaned = raw.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(cleaned.slice(cleaned.indexOf("{"), cleaned.lastIndexOf("}") + 1));
       setResult(cleanResult(parsed));
     } catch (e) {
-      setError("That draft didn't come through cleanly. Try Generate again.");
+      setError(e && e.message ? e.message : "That draft didn't come through cleanly. Try Generate again.");
     } finally {
       setLoading(false);
     }
@@ -473,6 +503,20 @@ export default function ContentDesk() {
 
       <div className="grid">
         <section className="controls">
+          <div className="ctrl-label">OpenAI API key</div>
+          <input className="topic" type="password" value={apiKey} autoComplete="off"
+            onChange={(e) => saveKey(e.target.value)} placeholder="sk-..." />
+          <div className="slider-note">
+            {apiKey.trim() ? "Key saved in this browser only." : "Paste your key. Stored in this browser only, sent only to OpenAI."}
+          </div>
+
+          <div className="ctrl-label">Model</div>
+          <div className="tones">
+            {OPENAI_MODELS.map((m) => (
+              <button key={m.id} className={"tone" + (m.id === modelId ? " on" : "")} onClick={() => setModelId(m.id)}>{m.label}</button>
+            ))}
+          </div>
+
           <div className="ctrl-label">Pillar</div>
           <div className="pillars">
             {PILLARS.map((p) => (
