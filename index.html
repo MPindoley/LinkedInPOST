@@ -56,17 +56,18 @@ const TONES = ["Educator", "Conversational", "Bold but careful"];
 const LEN_LABELS = ["Short", "Standard", "Long", "Max"];
 const LEN_WORDS = [80, 150, 230, 300];
 
-// OpenAI only. Pick the model used for drafting. gpt-4o-mini is fast and cheap;
-// gpt-4o is higher quality. You can add any chat model id your key can access.
-const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
-const OPENAI_MODELS = [
-  { id: "gpt-4o-mini", label: "4o mini" },
-  { id: "gpt-4o", label: "4o" },
+// Anthropic API. claude-haiku-4-5 is fast and cheap; claude-sonnet-4-6 is higher quality.
+const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_MODELS = [
+  { id: "claude-haiku-4-5-20251001", label: "Haiku" },
+  { id: "claude-sonnet-4-6", label: "Sonnet" },
 ];
 
-// Three restrained palettes. One palette runs across the whole carousel so the
+// Six restrained palettes. One palette runs across the whole carousel so the
 // set looks authored, not auto-generated. Each defines a calm cover/close
 // variant so slides 1 and 5 frame the set without breaking cohesion.
+// On each new generate, the palette rotates automatically so every carousel
+// looks distinct from the last.
 const THEMES = {
   ivory: {
     name: "Ivory",
@@ -86,7 +87,31 @@ const THEMES = {
     line: "#D0D5D7", chipInk: "#E8EBEC",
     coverBg: "#13242C", coverInk: "#EEF1F1", coverSub: "#8FA1A6",
   },
+  obsidian: {
+    name: "Obsidian",
+    bg: "#1C1C22", ink: "#EEEAE0", sub: "#8A8699", accent: "#B07ECD",
+    line: "#2E2C38", chipInk: "#1C1C22",
+    coverBg: "#0F0F14", coverInk: "#EEEAE0", coverSub: "#7A7688",
+  },
+  parchment: {
+    name: "Parchment",
+    bg: "#F8F3E8", ink: "#2C1F0E", sub: "#7A6A52", accent: "#C04B2A",
+    line: "#E3D9C4", chipInk: "#F8F3E8",
+    coverBg: "#1E120A", coverInk: "#F8F3E8", coverSub: "#B09A7A",
+  },
+  ocean: {
+    name: "Ocean",
+    bg: "#EEF4F7", ink: "#0E2333", sub: "#4A6475", accent: "#1477A8",
+    line: "#D1DEE6", chipInk: "#EEF4F7",
+    coverBg: "#0A1D2E", coverInk: "#EEF4F7", coverSub: "#7A9BAE",
+  },
 };
+const THEME_KEYS = Object.keys(THEMES);
+// Pick the next theme in rotation given the current one.
+function nextTheme(currentId) {
+  const idx = THEME_KEYS.indexOf(currentId);
+  return THEME_KEYS[(idx + 1) % THEME_KEYS.length];
+}
 
 const DEFAULT_DISCLAIMER =
   "Educational content only, not individualized financial, tax, or legal advice. Consult a qualified professional about your own situation.";
@@ -207,7 +232,7 @@ function setTracking(ctx, v) {
   try { ctx.letterSpacing = v; } catch (e) {}
 }
 
-function drawSlide(canvas, slide, i, total, opts) {
+function drawSlide(canvas, slide, i, total, opts, overlayImg) {
   const { theme, kicker, brand } = opts;
   const W = 1080, H = 1350, PAD = 104;
   canvas.width = W; canvas.height = H;
@@ -222,6 +247,33 @@ function drawSlide(canvas, slide, i, total, opts) {
   const accent = theme.accent;
 
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+  // --- Optional image overlay: fills the background zone behind the text. ----
+  if (overlayImg) {
+    const imgZoneH = Math.round(H * 0.45); // top 45% of slide
+    const imgZoneY = 0;
+    // Draw image scaled to cover the zone, centered.
+    const scaleX = W / overlayImg.width;
+    const scaleY = imgZoneH / overlayImg.height;
+    const scale = Math.max(scaleX, scaleY);
+    const drawW = overlayImg.width * scale;
+    const drawH = overlayImg.height * scale;
+    const drawX = (W - drawW) / 2;
+    const drawY = imgZoneY + (imgZoneH - drawH) / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, imgZoneY, W, imgZoneH);
+    ctx.clip();
+    ctx.drawImage(overlayImg, drawX, drawY, drawW, drawH);
+    ctx.restore();
+    // Gradient overlay so text remains legible
+    const grad = ctx.createLinearGradient(0, imgZoneY, 0, imgZoneY + imgZoneH);
+    grad.addColorStop(0, "rgba(0,0,0,0.18)");
+    grad.addColorStop(1, bg + "FF");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, imgZoneY, W, imgZoneH);
+  }
+
   ctx.textBaseline = "alphabetic";
 
   // --- Header: kicker (left) + index (right). One thin accent rule below. ----
@@ -355,11 +407,11 @@ function downloadCanvas(canvas, name) {
 
 // Small live thumbnail of a slide. Renders the real drawSlide so the strip is
 // an exact preview, and clicking it jumps to that slide in the carousel tab.
-function SlideThumb({ slide, i, total, opts, ready, active, onClick }) {
+function SlideThumb({ slide, i, total, opts, ready, active, onClick, overlayImg }) {
   const ref = useRef(null);
   useEffect(() => {
-    if (ref.current) drawSlide(ref.current, slide, i, total, opts);
-  }, [slide, i, total, opts, ready]);
+    if (ref.current) drawSlide(ref.current, slide, i, total, opts, overlayImg);
+  }, [slide, i, total, opts, ready, overlayImg]);
   return (
     <button className={"thumb" + (active ? " on" : "")} onClick={onClick} title={"Slide " + (i + 1)}>
       <canvas ref={ref} />
@@ -385,19 +437,29 @@ function ContentDesk() {
   const [copied, setCopied] = useState("");
   const [editDisc, setEditDisc] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
-  const [modelId, setModelId] = useState("gpt-4o-mini");
+  const [modelId, setModelId] = useState("claude-haiku-4-5-20251001");
   const [apiKey, setApiKey] = useState(() => {
     try {
-      const stored = localStorage.getItem("openai_api_key");
+      const stored = localStorage.getItem("anthropic_api_key");
       if (stored) return stored;
       return "";
     } catch (e) { return ""; }
   });
+  // Image overlay: { slideIdx, dataUrl } or null
+  const [slideImage, setSlideImage] = useState(null);
+  const imageInputRef = useRef(null);
   const canvasRef = useRef(null);
 
   function saveKey(v) {
     setApiKey(v);
-    try { localStorage.setItem("openai_api_key", v); } catch (e) {}
+    try { localStorage.setItem("anthropic_api_key", v); } catch (e) {}
+  }
+
+  function handleImageFile(file) {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (e) => setSlideImage({ slideIdx: slide, dataUrl: e.target.result });
+    reader.readAsDataURL(file);
   }
 
   const pillar = PILLARS.find((p) => p.id === pillarId);
@@ -431,35 +493,50 @@ function ContentDesk() {
     return () => { dead = true; };
   }, []);
 
+  // Preload the image object when a new image is set.
   useEffect(() => {
-    if (view !== "carousel" || !canvasRef.current || !slides[slide]) return;
-    drawSlide(canvasRef.current, slides[slide], slide, slides.length, drawOpts);
-  }, [view, slide, result, fontsReady, drawOpts]);
+    if (!slideImage || !slideImage.dataUrl) return;
+    const img = new Image();
+    img.onload = () => setSlideImage((prev) => prev ? { ...prev, _img: img } : prev);
+    img.src = slideImage.dataUrl;
+  }, [slideImage?.dataUrl]);
+
+  useEffect(() => {
+    const img = (slideImage && slideImage.slideIdx === slide) ? slideImage._img : null;
+    drawSlide(canvasRef.current, slides[slide], slide, slides.length, drawOpts, img);
+  }, [view, slide, result, fontsReady, drawOpts, slideImage]);
 
   async function generate() {
     if (!apiKey.trim()) {
-      setError("Add your OpenAI API key above to generate.");
+      setError("Add your Anthropic API key above to generate.");
       return;
     }
+    // Rotate palette on every new generate so each carousel looks distinct.
+    const nextThemeId = nextTheme(themeId);
+    setThemeId(nextThemeId);
+    // Clear any pinned slide image so it doesn't bleed into the new post.
+    setSlideImage(null);
     setLoading(true); setError(""); setResult(null); setSlide(0); setView("post");
     try {
-      const userMsg = liveTopic
+      // Inject a random seed so the model always produces a fresh result.
+      const seed = Math.random().toString(36).slice(2, 8).toUpperCase();
+      const userMsg = (liveTopic
         ? `Topic / angle to use: "${liveTopic}". Generate the ${pillar.label} post and carousel around this.`
-        : `No topic given, choose a fresh interesting one yourself. Generate the ${pillar.label} post and carousel.`;
-      // OpenAI Chat Completions, called directly from the browser with your key.
-      const response = await fetch(OPENAI_ENDPOINT, {
+        : `No topic given, choose a fresh interesting one yourself. Generate the ${pillar.label} post and carousel.`)
+        + ` [RUN-ID:${seed}]`;
+      const response = await fetch(ANTHROPIC_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bearer " + apiKey.trim(),
+          "x-api-key": apiKey.trim(),
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
         },
         body: JSON.stringify({
           model: modelId,
-          temperature: 0.8,
           max_tokens: 1200,
-          response_format: { type: "json_object" },
+          system: buildSystemPrompt(pillar, tone, LEN_WORDS[lenIdx], LEN_LABELS[lenIdx]),
           messages: [
-            { role: "system", content: buildSystemPrompt(pillar, tone, LEN_WORDS[lenIdx], LEN_LABELS[lenIdx]) },
             { role: "user", content: userMsg },
           ],
         }),
@@ -467,12 +544,12 @@ function ContentDesk() {
       if (!response.ok) {
         let detail = "";
         try { detail = (await response.json())?.error?.message || ""; } catch (e) {}
-        if (response.status === 401) throw new Error("Your OpenAI API key was rejected (401). Check the key.");
-        if (response.status === 429) throw new Error("OpenAI rate limit or quota reached (429). " + detail);
-        throw new Error("OpenAI error " + response.status + ". " + detail);
+        if (response.status === 401) throw new Error("Your Anthropic API key was rejected (401). Check the key.");
+        if (response.status === 429) throw new Error("Anthropic rate limit or quota reached (429). " + detail);
+        throw new Error("Anthropic error " + response.status + ". " + detail);
       }
       const data = await response.json();
-      const raw = data.choices?.[0]?.message?.content || "";
+      const raw = data.content?.[0]?.text || "";
       const cleaned = raw.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(cleaned.slice(cleaned.indexOf("{"), cleaned.lastIndexOf("}") + 1));
       setResult(cleanResult(parsed));
@@ -499,7 +576,8 @@ function ContentDesk() {
   function downloadAll() {
     slides.forEach((s, i) => {
       const c = document.createElement("canvas");
-      drawSlide(c, s, i, slides.length, drawOpts);
+      const img = (slideImage && slideImage.slideIdx === i) ? slideImage._img : null;
+      drawSlide(c, s, i, slides.length, drawOpts, img);
       setTimeout(() => downloadCanvas(c, `carousel-slide-${i + 1}.png`), i * 280);
     });
   }
@@ -522,16 +600,16 @@ function ContentDesk() {
 
       <div className="grid">
         <section className="controls">
-          <div className="ctrl-label">OpenAI API key</div>
+          <div className="ctrl-label">Anthropic API key</div>
           <input className="topic" type="password" value={apiKey} autoComplete="off"
-            onChange={(e) => saveKey(e.target.value)} placeholder="sk-..." />
+            onChange={(e) => saveKey(e.target.value)} placeholder="sk-ant-..." />
           <div className="slider-note">
-            {apiKey.trim() ? "Key saved in this browser only." : "Paste your key. Stored in this browser only, sent only to OpenAI."}
+            {apiKey.trim() ? "Key saved in this browser only." : "Paste your key. Stored in this browser only, sent only to Anthropic."}
           </div>
 
           <div className="ctrl-label">Model</div>
           <div className="tones">
-            {OPENAI_MODELS.map((m) => (
+            {ANTHROPIC_MODELS.map((m) => (
               <button key={m.id} className={"tone" + (m.id === modelId ? " on" : "")} onClick={() => setModelId(m.id)}>{m.label}</button>
             ))}
           </div>
@@ -568,7 +646,7 @@ function ContentDesk() {
             ))}
           </div>
 
-          <div className="ctrl-label">Carousel theme</div>
+          <div className="ctrl-label">Carousel theme <span className="opt">rotates on each generate</span></div>
           <div className="themes">
             {Object.entries(THEMES).map(([id, t]) => (
               <button key={id} className={"theme-btn" + (id === themeId ? " on" : "")} onClick={() => setThemeId(id)}>
@@ -587,7 +665,7 @@ function ContentDesk() {
           <button className="generate" onClick={generate} disabled={loading}>
             {loading ? "Drafting..." : liveTopic ? "Generate draft" : "Surprise me"}
           </button>
-          <p className="hint">Generates a post and a matching image carousel together. The byline ties them as one piece. Always route to your back office before publishing.</p>
+          <p className="hint">Generates a fresh post and matching carousel every time. Theme rotates automatically. The byline ties them as one piece. Always route to your back office before publishing.</p>
         </section>
 
         <section className="output">
@@ -632,6 +710,7 @@ function ContentDesk() {
                         {slides.map((s, i) => (
                           <SlideThumb key={i} slide={s} i={i} total={slides.length} opts={drawOpts}
                             ready={fontsReady} active={false}
+                            overlayImg={(slideImage && slideImage.slideIdx === i) ? slideImage._img : null}
                             onClick={() => { setView("carousel"); setSlide(i); }} />
                         ))}
                       </div>
@@ -640,7 +719,7 @@ function ContentDesk() {
 
                   <div className="proof-actions">
                     <button className="act" onClick={() => copy(fullPostText(), "post")}>{copied === "post" ? "Copied ✓" : "Copy post"}</button>
-                    <button className="act ghost" onClick={generate}>Regenerate</button>
+                    <button className="act ghost" onClick={generate}>New draft</button>
                   </div>
                 </div>
               )}
@@ -655,10 +734,27 @@ function ContentDesk() {
                   <div className="dots">
                     {slides.map((_, i) => (<button key={i} className={"dot" + (i === slide ? " on" : "")} onClick={() => setSlide(i)} />))}
                   </div>
+                  {/* Image overlay controls for current slide */}
+                  <div className="img-overlay-row">
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      onChange={(e) => { if (e.target.files[0]) handleImageFile(e.target.files[0]); e.target.value = ""; }}
+                    />
+                    <button className="act ghost img-btn" onClick={() => imageInputRef.current && imageInputRef.current.click()}>
+                      {(slideImage && slideImage.slideIdx === slide) ? "Change image" : "+ Add image to this slide"}
+                    </button>
+                    {slideImage && slideImage.slideIdx === slide && (
+                      <button className="act ghost img-btn" onClick={() => setSlideImage(null)}>Remove image</button>
+                    )}
+                    <span className="img-hint">Image fades into the top of slide {slide + 1}</span>
+                  </div>
                   <div className="proof-actions center">
                     <button className="act" onClick={() => canvasRef.current && downloadCanvas(canvasRef.current, `carousel-slide-${slide + 1}.png`)}>Download this slide</button>
                     <button className="act" onClick={downloadAll}>Download all</button>
-                    <button className="act ghost" onClick={generate}>Regenerate</button>
+                    <button className="act ghost" onClick={generate}>New draft</button>
                   </div>
                   <p className="hint center">1080 &times; 1350 PNG slides, ready to upload. The minimal slides pull the swipe; the full read lives in your post caption.</p>
                 </div>
@@ -804,7 +900,12 @@ const css = `
 .dot{width:7px;height:7px;border-radius:50%;background:var(--line);border:none;cursor:pointer;padding:0;}
 .dot.on{background:var(--brass);}
 
-.compliance{margin-top:22px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;}
+.img-overlay-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 4px;justify-content:center;}
+.img-btn{font-size:12px;padding:7px 13px;}
+.img-hint{font-size:11px;color:var(--muted);flex:none;}
+.themes{display:flex;gap:6px;flex-wrap:wrap;}
+.theme-btn{min-width:44px;flex:1;}
+
 .comp-head{display:flex;justify-content:space-between;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;color:var(--brass);text-transform:uppercase;margin-bottom:12px;}
 .disc-edit{background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;font-size:11px;padding:4px 9px;cursor:pointer;font-family:inherit;letter-spacing:0;text-transform:none;}
 .disc-box{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);font-family:inherit;font-size:12.5px;padding:9px;margin-bottom:12px;resize:vertical;}
@@ -823,7 +924,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<ContentDesk />);
     </script>
 
     <script>
-      (function () {
+      window.addEventListener('load', function () {
         try {
           var raw = document.getElementById("app-source").textContent;
           // Classic runtime => React.createElement, so the output has no imports.
@@ -837,7 +938,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<ContentDesk />);
             "The Desk failed to start:\n\n" + (e && e.message ? e.message : e) + "</pre>";
           console.error(e);
         }
-      })();
+      });
     </script>
   </body>
 </html>
