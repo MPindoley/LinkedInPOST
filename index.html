@@ -118,7 +118,19 @@ const TEMPLATES = [
   { id: "split", label: "Split", blurb: "Bold color panel carries the headline." },
   { id: "band", label: "Band", blurb: "Headline knocked out of an accent band." },
   { id: "corner", label: "Corner", blurb: "Headline high, big numeral in the corner." },
+  { id: "dispatch", label: "Dispatch", blurb: "Section front: label, rule, lead headline." },
+  { id: "bulletin", label: "Bulletin", blurb: "Solid color flag off the left edge." },
+  { id: "stat", label: "Figure", blurb: "Pulls the number out and sets it huge." },
+  { id: "ticker", label: "Ticker", blurb: "Market wire: top rule and tick strip." },
+  { id: "coverstory", label: "Cover Story", blurb: "Magazine masthead, headline low." },
+  { id: "captioncard", label: "Caption Card", blurb: "Clean photo, words on paper below." },
+  { id: "column", label: "Column", blurb: "Narrow print column against a rule." },
+  { id: "poster", label: "Poster", blurb: "Huge uppercase headline, edge to edge." },
+  { id: "silent", label: "Silent", blurb: "The photo alone, no words at all. Needs slide photos." },
 ];
+// Silent has no words, so a random draw must never land on it. It stays
+// available by name.
+const SURPRISE_TEMPLATES = TEMPLATES.map((t) => t.id).filter((id) => id !== "silent");
 
 // A photographic house style appended to every image prompt so the set stays
 // cohesive, premium, and free of baked-in text.
@@ -189,6 +201,54 @@ const THEMES = {
     line: "#DFD5E4", chipInk: "#F0EBF2",
     coverBg: "#1D1226", coverInk: "#F2EDF5", coverSub: "#A697B3",
   },
+  newsprint: {
+    name: "Newsprint",
+    bg: "#FBEDE2", ink: "#241F1B", sub: "#7A6A5D", accent: "#0F5499",
+    line: "#EBD9C8", chipInk: "#FBEDE2",
+    coverBg: "#1E1A17", coverInk: "#FBEDE2", coverSub: "#B3A395",
+  },
+  crimson: {
+    name: "Crimson",
+    bg: "#F7F4F2", ink: "#17130F", sub: "#6C635C", accent: "#C8102E",
+    line: "#E4DDD7", chipInk: "#F7F4F2",
+    coverBg: "#1A1210", coverInk: "#F7F4F2", coverSub: "#A89A92",
+  },
+  cobalt: {
+    name: "Cobalt",
+    bg: "#ECF0F7", ink: "#0D1424", sub: "#525E78", accent: "#1B4FD8",
+    line: "#D5DCE9", chipInk: "#ECF0F7",
+    coverBg: "#0A1020", coverInk: "#EDF1F8", coverSub: "#8892AC",
+  },
+  espresso: {
+    name: "Espresso",
+    bg: "#EFE6DA", ink: "#241A11", sub: "#7B6A57", accent: "#A85B28",
+    line: "#DFD1BE", chipInk: "#EFE6DA",
+    coverBg: "#1B120B", coverInk: "#F0E7DB", coverSub: "#AD9A83",
+  },
+  porcelain: {
+    name: "Porcelain",
+    bg: "#F6F6F4", ink: "#101010", sub: "#6E6E6B", accent: "#242424",
+    line: "#E3E3DF", chipInk: "#F6F6F4",
+    coverBg: "#111111", coverInk: "#F6F6F4", coverSub: "#9A9A96",
+  },
+  steel: {
+    name: "Steel",
+    bg: "#E5E9EC", ink: "#151C23", sub: "#586470", accent: "#3F7492",
+    line: "#CFD6DC", chipInk: "#E5E9EC",
+    coverBg: "#131A21", coverInk: "#E9EDF0", coverSub: "#8E9BA7",
+  },
+  petrol: {
+    name: "Petrol",
+    bg: "#E4EBEA", ink: "#0C1F1F", sub: "#4F6664", accent: "#0E6E68",
+    line: "#CDD9D8", chipInk: "#E4EBEA",
+    coverBg: "#0A1A1A", coverInk: "#E6EDEC", coverSub: "#7E9694",
+  },
+  ochre: {
+    name: "Ochre",
+    bg: "#F4EEE1", ink: "#231D12", sub: "#776B54", accent: "#B8862B",
+    line: "#E4D9C3", chipInk: "#231D12",
+    coverBg: "#1C1710", coverInk: "#F4EEE1", coverSub: "#AE9F84",
+  },
 };
 
 const DEFAULT_DISCLAIMER =
@@ -207,6 +267,55 @@ const STATIC_CHECKS = [
 const SERIF = '"Newsreader", Georgia, serif';
 const SANS = '"Inter Tight", system-ui, sans-serif';
 const MONO = '"IBM Plex Mono", ui-monospace, monospace';
+
+// Every face the slide renderer can use. Loaded once, up front.
+const FF = {
+  newsreader:  '"Newsreader", Georgia, serif',
+  playfair:    '"Playfair Display", Georgia, serif',
+  sourceserif: '"Source Serif 4", Georgia, serif',
+  bodoni:      '"Bodoni Moda", Didot, Georgia, serif',
+  dmserif:     '"DM Serif Display", Georgia, serif',
+  lora:        '"Lora", Georgia, serif',
+  inter:       '"Inter Tight", system-ui, sans-serif',
+  franklin:    '"Libre Franklin", Helvetica, sans-serif',
+  archivo:     '"Archivo", Helvetica, sans-serif',
+  grotesk:     '"Space Grotesk", system-ui, sans-serif',
+  oswald:      '"Oswald", "Arial Narrow", sans-serif',
+  plexmono:    '"IBM Plex Mono", ui-monospace, monospace',
+  spacemono:   '"Space Mono", ui-monospace, monospace',
+};
+const FONT_FAMILIES = ["Newsreader", "Playfair Display", "Source Serif 4", "Bodoni Moda",
+  "DM Serif Display", "Lora", "Inter Tight", "Libre Franklin", "Archivo", "Space Grotesk",
+  "Oswald", "IBM Plex Mono", "Space Mono"];
+
+// A typeface pairing: a headline face, a body face, a label face, plus the
+// weight, size, leading, and tracking that face needs at display size. This is
+// what makes two slides read as different publications.
+const FONT_SETS = {
+  journal:    { name: "Journal",    blurb: "Newsreader + Inter Tight, the original look.",  head: FF.newsreader,  body: FF.inter,    label: FF.plexmono,  headW: 500, size: 1.00, lead: 1.10, track: "0px" },
+  broadsheet: { name: "Broadsheet", blurb: "Playfair Display + Libre Franklin, daily paper.", head: FF.playfair,  body: FF.franklin, label: FF.plexmono,  headW: 500, size: 0.96, lead: 1.14, track: "0px" },
+  exchange:   { name: "Exchange",   blurb: "Source Serif + Archivo, financial weekly.",     head: FF.sourceserif, body: FF.archivo,  label: FF.plexmono,  headW: 600, size: 1.00, lead: 1.12, track: "0px" },
+  runway:     { name: "Runway",     blurb: "Bodoni Moda + Archivo, business cover.",        head: FF.bodoni,      body: FF.archivo,  label: FF.spacemono, headW: 500, size: 1.02, lead: 1.12, track: "0px" },
+  modern:     { name: "Modern",     blurb: "DM Serif + Space Grotesk, contemporary brand.", head: FF.dmserif,     body: FF.grotesk,  label: FF.spacemono, headW: 400, size: 1.00, lead: 1.10, track: "0px" },
+  wire:       { name: "Wire",       blurb: "Oswald caps + Libre Franklin, news poster.",    head: FF.oswald,      body: FF.franklin, label: FF.plexmono,  headW: 600, size: 1.14, lead: 1.02, track: "0px", upper: true },
+  quarterly:  { name: "Quarterly",  blurb: "Lora + Inter Tight, warm and traditional.",     head: FF.lora,        body: FF.inter,    label: FF.plexmono,  headW: 600, size: 0.96, lead: 1.14, track: "0px" },
+  bureau:     { name: "Bureau",     blurb: "Archivo heavy sans headline, data desk.",       head: FF.archivo,     body: FF.franklin, label: FF.spacemono, headW: 800, size: 0.94, lead: 1.05, track: "-1px" },
+};
+const FONT_KEYS = Object.keys(FONT_SETS);
+
+// The pairing each layout was drawn for, used when the typeface is left on
+// "Match layout".
+const LAYOUT_FONTS = {
+  editorial: "journal", broadsheet: "broadsheet", index: "modern", ledger: "exchange",
+  feature: "runway", quote: "quarterly", frame: "runway", split: "bureau",
+  band: "wire", corner: "modern", dispatch: "broadsheet", bulletin: "bureau",
+  stat: "exchange", ticker: "wire", coverstory: "runway", captioncard: "modern",
+  column: "quarterly", poster: "wire", silent: "journal",
+};
+function resolveFonts(fontsId, template) {
+  if (fontsId && fontsId !== "auto" && FONT_SETS[fontsId]) return FONT_SETS[fontsId];
+  return FONT_SETS[LAYOUT_FONTS[template] || "journal"] || FONT_SETS.journal;
+}
 
 // Strip em/en dashes anywhere they slip through.
 function deDash(s) {
@@ -358,24 +467,66 @@ function fitText(ctx, text, maxW, font, startSize, minSize, maxLines) {
   return { size: minSize, lines: wrap(ctx, text, maxW) };
 }
 
+// Fit a headline into a fixed height as well as a line count, by trying
+// progressively tighter line counts. Keeps a long headline out of the byline.
+function fitBlock(ctx, text, maxW, font, startSize, minSize, maxLines, lead, availH) {
+  let best = null;
+  for (let lines = maxLines; lines >= 2; lines--) {
+    const fit = fitText(ctx, text, maxW, font, startSize, minSize, lines);
+    best = best || fit;
+    if (fit.lines.length * fit.size * lead <= availH) return fit;
+  }
+  return best;
+}
+
+// Largest size that keeps a short string on one line.
+function fitOneLine(ctx, text, maxW, font, startSize, minSize) {
+  let size = startSize;
+  while (size > minSize) {
+    ctx.font = font.replace("__SIZE__", size + "px");
+    if (ctx.measureText(text).width <= maxW) break;
+    size -= 6;
+  }
+  ctx.font = font.replace("__SIZE__", size + "px");
+  return size;
+}
+
 function setTracking(ctx, v) {
   try { ctx.letterSpacing = v; } catch (e) {}
 }
 
+// Headline helpers, so every layout respects the active pairing: a caps-only
+// pairing uppercases, and each pairing scales headline sizes to its own face.
+function HT(v, t) { return v.f && v.f.upper ? String(t || "").toUpperCase() : String(t || ""); }
+function S(v, n) { return Math.round(n * ((v.f && v.f.size) || 1)); }
+function headFont(v) { return v.f.headW + " __SIZE__ " + v.f.head; }
+function headAt(v, size) { return v.f.headW + " " + size + "px " + v.f.head; }
+
+// Layouts that want the photograph left alone, with no darkening scrim.
+const NO_SCRIM = { silent: true, captioncard: true };
+
 function drawSlide(canvas, slide, i, total, opts, img) {
-  const { theme, kicker, brand, template } = opts;
+  const { theme, kicker, brand } = opts;
+  const f = opts.fonts || FONT_SETS.journal;
+  let template = opts.template;
   const W = 1080, H = 1350, PAD = 104;
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
   const kind = slide.kind;
   const isFrame = kind === "cover" || kind === "close";
   const hasImg = !!(img && img.width);
+  // A wordless slide needs a photograph. Without one, fall back to type.
+  if (template === "silent" && !hasImg) template = "editorial";
   const accent = theme.accent;
 
   // Color scheme. Over a photo we always use light text on a dark scrim; on a
   // plain slide we use the theme's ink/sub for the cover/close vs inner pages.
+  // Caption Card is the exception: its words sit on a paper card, not on the
+  // photo, so it keeps the theme's own colors.
   let ink, sub, line;
-  if (hasImg) {
+  if (hasImg && template === "captioncard") {
+    ink = theme.ink; sub = theme.sub; line = theme.line;
+  } else if (hasImg) {
     ink = "#F7F4ED"; sub = "rgba(247,244,237,0.86)"; line = "rgba(255,255,255,0.30)";
   } else if (isFrame) {
     ink = theme.coverInk; sub = theme.coverSub; line = "rgba(255,255,255,0.14)";
@@ -386,13 +537,16 @@ function drawSlide(canvas, slide, i, total, opts, img) {
   if (hasImg) {
     drawCover(ctx, img, W, H);
     // Vertical scrim tinted with the theme's dark color, so the selected theme
-    // still reads through the photo while keeping every line legible.
-    const tint = theme.coverBg;
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, hexToRgba(tint, 0.55));
-    g.addColorStop(0.46, hexToRgba(tint, 0.60));
-    g.addColorStop(1, hexToRgba(tint, 0.92));
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // still reads through the photo while keeping every line legible. The
+    // photo-first layouts skip it and show the picture clean.
+    if (!NO_SCRIM[template]) {
+      const tint = theme.coverBg;
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, hexToRgba(tint, 0.55));
+      g.addColorStop(0.46, hexToRgba(tint, 0.60));
+      g.addColorStop(1, hexToRgba(tint, 0.92));
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
   } else {
     ctx.fillStyle = isFrame ? theme.coverBg : theme.bg;
     ctx.fillRect(0, 0, W, H);
@@ -400,7 +554,7 @@ function drawSlide(canvas, slide, i, total, opts, img) {
   ctx.textBaseline = "alphabetic";
 
   // Shared context, then dispatch to the chosen layout template.
-  const v = { W, H, PAD, slide, i, total, kind, isFrame, hasImg, kicker, brand, theme, ink, sub, line, accent };
+  const v = { W, H, PAD, slide, i, total, kind, isFrame, hasImg, kicker, brand, theme, ink, sub, line, accent, f };
   if (template === "broadsheet") drawBroadsheet(ctx, v);
   else if (template === "index") drawIndexLayout(ctx, v);
   else if (template === "ledger") drawLedger(ctx, v);
@@ -410,12 +564,21 @@ function drawSlide(canvas, slide, i, total, opts, img) {
   else if (template === "split") drawSplit(ctx, v);
   else if (template === "band") drawBand(ctx, v);
   else if (template === "corner") drawCorner(ctx, v);
+  else if (template === "dispatch") drawDispatch(ctx, v);
+  else if (template === "bulletin") drawBulletin(ctx, v);
+  else if (template === "stat") drawStat(ctx, v);
+  else if (template === "ticker") drawTicker(ctx, v);
+  else if (template === "coverstory") drawCoverStory(ctx, v);
+  else if (template === "captioncard") drawCaptionCard(ctx, v);
+  else if (template === "column") drawColumn(ctx, v);
+  else if (template === "poster") drawPoster(ctx, v);
+  else if (template === "silent") { /* the photograph is the slide */ }
   else drawEditorial(ctx, v);
 }
 
 // N progress segments along the bottom, filled through the current slide.
 function drawProgress(ctx, v) {
-  const { W, H, PAD, total, i, accent, line } = v;
+  const { W, H, PAD, total, i, accent, line, f } = v;
   if (total <= 1) return; // no progress bar for a one-slide carousel
   const segTop = H - 96, segGap = 9;
   const segW = (W - PAD * 2 - segGap * (total - 1)) / total;
@@ -429,14 +592,14 @@ function drawProgress(ctx, v) {
 // Shared left-aligned footer: hairline rule, brand byline, and a swipe cue or
 // accent dot. Used by the left-aligned templates.
 function drawFooterLeft(ctx, v, ruleY) {
-  const { W, PAD, brand, ink, sub, line, accent, kind, total } = v;
+  const { W, PAD, brand, ink, sub, line, accent, kind, total, f } = v;
   ctx.strokeStyle = line; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(PAD, ruleY); ctx.lineTo(W - PAD, ruleY); ctx.stroke();
   ctx.textAlign = "left";
-  ctx.fillStyle = ink; ctx.font = "600 30px " + SANS; ctx.fillText(brand.name, PAD, ruleY + 50);
-  ctx.fillStyle = sub; ctx.font = "400 26px " + SANS; ctx.fillText(brand.handle, PAD, ruleY + 88);
+  ctx.fillStyle = ink; ctx.font = "600 30px " + f.body; ctx.fillText(brand.name, PAD, ruleY + 50);
+  ctx.fillStyle = sub; ctx.font = "400 26px " + f.body; ctx.fillText(brand.handle, PAD, ruleY + 88);
   if (kind === "cover" && total > 1) {
-    ctx.fillStyle = accent; ctx.font = "500 24px " + MONO; setTracking(ctx, "3px");
+    ctx.fillStyle = accent; ctx.font = "500 24px " + f.label; setTracking(ctx, "3px");
     ctx.textAlign = "right"; ctx.fillText("SWIPE →", W - PAD, ruleY + 56); ctx.textAlign = "left"; setTracking(ctx, "0px");
   } else {
     ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(W - PAD - 6, ruleY + 44, 7, 0, Math.PI * 2); ctx.fill();
@@ -446,10 +609,10 @@ function drawFooterLeft(ctx, v, ruleY) {
 // Template 4: Ledger. A vertical accent rail on the left with a top-anchored
 // headline, like a column in a ledger.
 function drawLedger(ctx, v) {
-  const { W, H, PAD, slide, i, total, kind, ink, sub, accent } = v;
+  const { W, H, PAD, slide, i, total, kind, ink, sub, accent, f } = v;
   const textX = PAD + 44, maxW = W - textX - PAD;
   const headY = PAD + 26;
-  ctx.textAlign = "right"; ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.textAlign = "right"; ctx.fillStyle = sub; ctx.font = "500 26px " + f.label; setTracking(ctx, "2px");
   ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, headY);
   ctx.textAlign = "left"; setTracking(ctx, "0px");
   const ruleY = H - 232;
@@ -459,20 +622,20 @@ function drawLedger(ctx, v) {
   drawProgress(ctx, v);
 
   const zoneTop = headY + 72;
-  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 92 : 78, 44, 4);
-  const hLine = hFit.size * 1.1;
-  ctx.textAlign = "left"; ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, f.headW + " __SIZE__ " + f.head, S(v, kind === "cover" ? 92 : 78), 44, 4);
+  const hLine = hFit.size * f.lead;
+  ctx.textAlign = "left"; ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
   const y = zoneTop + hFit.size;
   hFit.lines.forEach((ln, k) => ctx.fillText(ln, textX, y + k * hLine));
   const subText = slide.summary || slide.sub || "";
   if (subText) {
-    const subSize = 34; ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    const subSize = 34; ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
     const sLines = wrap(ctx, subText, maxW).slice(0, 6); const sLine = subSize * 1.4;
     const sy = y + (hFit.lines.length - 1) * hLine + 56;
     sLines.forEach((ln, k) => ctx.fillText(ln, textX, sy + k * sLine));
   }
   if (kind === "close") {
-    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label; setTracking(ctx, "1px");
     ctx.fillText("Educational content, not individualized advice.", textX, ruleY - 30);
     setTracking(ctx, "0px");
   }
@@ -481,10 +644,10 @@ function drawLedger(ctx, v) {
 // Template 5: Feature. Headline anchored to the bottom of the frame, leaving
 // the top open. Reads like a magazine cover, and sits well over a photo.
 function drawFeature(ctx, v) {
-  const { W, H, PAD, slide, i, total, kind, ink, sub } = v;
+  const { W, H, PAD, slide, i, total, kind, ink, sub, f } = v;
   const maxW = W - PAD * 2;
   const headY = PAD + 26;
-  ctx.textAlign = "left"; ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.textAlign = "left"; ctx.fillStyle = sub; ctx.font = "500 26px " + f.label; setTracking(ctx, "2px");
   ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), PAD, headY);
   setTracking(ctx, "0px");
   const ruleY = H - 232;
@@ -492,22 +655,22 @@ function drawFeature(ctx, v) {
   drawProgress(ctx, v);
 
   const zoneBottom = ruleY - 40;
-  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 104 : 88, 46, 4);
-  const hLine = hFit.size * 1.1;
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, f.headW + " __SIZE__ " + f.head, S(v, kind === "cover" ? 104 : 88), 46, 4);
+  const hLine = hFit.size * f.lead;
   const subText = slide.summary || slide.sub || "";
-  const subSize = 36; ctx.font = "400 " + subSize + "px " + SANS;
+  const subSize = 36; ctx.font = "400 " + subSize + "px " + f.body;
   const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 6) : []; const sLine = subSize * 1.4; const gap = sLines.length ? 50 : 0;
   const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
   const y = zoneBottom - blockH + hFit.size;
-  ctx.textAlign = "left"; ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  ctx.textAlign = "left"; ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
   hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
   if (sLines.length) {
     const sy = y + (hFit.lines.length - 1) * hLine + gap;
-    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
     sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
   }
   if (kind === "close") {
-    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label; setTracking(ctx, "1px");
     ctx.fillText("Educational content, not individualized advice.", PAD, headY + 48);
     setTracking(ctx, "0px");
   }
@@ -516,10 +679,10 @@ function drawFeature(ctx, v) {
 // Template 6: Quote. An oversized quotation mark frames the headline as a
 // pull-quote.
 function drawQuote(ctx, v) {
-  const { W, H, PAD, slide, i, total, kind, ink, sub, accent } = v;
+  const { W, H, PAD, slide, i, total, kind, ink, sub, accent, f } = v;
   const maxW = W - PAD * 2;
   const headY = PAD + 26;
-  ctx.textAlign = "right"; ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.textAlign = "right"; ctx.fillStyle = sub; ctx.font = "500 26px " + f.label; setTracking(ctx, "2px");
   ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, headY);
   ctx.textAlign = "left"; setTracking(ctx, "0px");
   const ruleY = H - 232;
@@ -527,26 +690,26 @@ function drawQuote(ctx, v) {
   drawProgress(ctx, v);
 
   ctx.textAlign = "left"; ctx.fillStyle = accent;
-  ctx.font = "600 230px " + SERIF; ctx.globalAlpha = 0.9;
+  ctx.font = "600 230px " + f.head; ctx.globalAlpha = 0.9;
   ctx.fillText("“", PAD - 12, PAD + 190); ctx.globalAlpha = 1;
 
   const zoneTop = PAD + 210, zoneBot = ruleY - 20;
-  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 84 : 72, 44, 4);
-  const hLine = hFit.size * 1.18;
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, f.headW + " __SIZE__ " + f.head, S(v, kind === "cover" ? 84 : 72), 44, 4);
+  const hLine = hFit.size * f.lead;
   const subText = slide.summary || slide.sub || "";
-  const subSize = 32; ctx.font = "400 " + subSize + "px " + SANS;
+  const subSize = 32; ctx.font = "400 " + subSize + "px " + f.body;
   const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 6) : []; const sLine = subSize * 1.4; const gap = sLines.length ? 46 : 0;
   const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
   const y = zoneTop + Math.max(0, (zoneBot - zoneTop - blockH) / 2) + hFit.size;
-  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
   hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
   if (sLines.length) {
     const sy = y + (hFit.lines.length - 1) * hLine + gap;
-    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
     sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
   }
   if (kind === "close") {
-    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label; setTracking(ctx, "1px");
     ctx.fillText("Educational content, not individualized advice.", PAD, Math.min(y + blockH + 52, ruleY - 24));
     setTracking(ctx, "0px");
   }
@@ -555,10 +718,10 @@ function drawQuote(ctx, v) {
 // Template 1: Editorial. Kicker + index header rule, left-aligned headline
 // optically centered, brand byline footer.
 function drawEditorial(ctx, v) {
-  const { W, H, PAD, slide, i, total, kind, brand, ink, sub, line, accent } = v;
+  const { W, H, PAD, slide, i, total, kind, brand, ink, sub, line, accent, f } = v;
   const headY = PAD + 26;
   ctx.textAlign = "right";
-  ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.fillStyle = sub; ctx.font = "500 26px " + f.label; setTracking(ctx, "2px");
   ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, headY);
   ctx.textAlign = "left"; setTracking(ctx, "0px");
   ctx.strokeStyle = line; ctx.lineWidth = 2;
@@ -567,10 +730,10 @@ function drawEditorial(ctx, v) {
   const ruleY = H - 232;
   ctx.strokeStyle = line; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(PAD, ruleY); ctx.lineTo(W - PAD, ruleY); ctx.stroke();
-  ctx.fillStyle = ink; ctx.font = "600 30px " + SANS; ctx.fillText(brand.name, PAD, ruleY + 50);
-  ctx.fillStyle = sub; ctx.font = "400 26px " + SANS; ctx.fillText(brand.handle, PAD, ruleY + 88);
+  ctx.fillStyle = ink; ctx.font = "600 30px " + f.body; ctx.fillText(brand.name, PAD, ruleY + 50);
+  ctx.fillStyle = sub; ctx.font = "400 26px " + f.body; ctx.fillText(brand.handle, PAD, ruleY + 88);
   if (kind === "cover" && total > 1) {
-    ctx.fillStyle = accent; ctx.font = "500 24px " + MONO; setTracking(ctx, "3px");
+    ctx.fillStyle = accent; ctx.font = "500 24px " + f.label; setTracking(ctx, "3px");
     ctx.textAlign = "right"; ctx.fillText("SWIPE →", W - PAD, ruleY + 56); ctx.textAlign = "left"; setTracking(ctx, "0px");
   } else {
     ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(W - PAD - 6, ruleY + 44, 7, 0, Math.PI * 2); ctx.fill();
@@ -578,24 +741,24 @@ function drawEditorial(ctx, v) {
   drawProgress(ctx, v);
 
   const maxW = W - PAD * 2;
-  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 104 : 88, 46, 4);
-  const hLine = hFit.size * 1.1;
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, f.headW + " __SIZE__ " + f.head, S(v, kind === "cover" ? 104 : 88), 46, 4);
+  const hLine = hFit.size * f.lead;
   const subText = slide.summary || slide.sub || "";
-  const subSize = 36; ctx.font = "400 " + subSize + "px " + SANS;
+  const subSize = 36; ctx.font = "400 " + subSize + "px " + f.body;
   const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 6) : [];
   const sLine = subSize * 1.4; const gap = sLines.length ? 54 : 0;
   const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
   const zoneTop = headY + 34, zoneBot = ruleY;
   let y = zoneTop + (zoneBot - zoneTop - blockH) / 2 + hFit.size;
-  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
   hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
   if (sLines.length) {
     const sy = y + (hFit.lines.length - 1) * hLine + gap;
-    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
     sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
   }
   if (kind === "close") {
-    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label; setTracking(ctx, "1px");
     ctx.fillText("Educational content, not individualized advice.", PAD, Math.min(y + blockH + 64, ruleY - 28));
     setTracking(ctx, "0px");
   }
@@ -604,7 +767,7 @@ function drawEditorial(ctx, v) {
 // Template 2: Broadsheet. A centered newspaper masthead with hairline rules,
 // a centered serif headline, and a centered byline. Wall Street Journal feel.
 function drawBroadsheet(ctx, v) {
-  const { W, H, PAD, slide, i, total, kind, brand, ink, sub, line, accent } = v;
+  const { W, H, PAD, slide, i, total, kind, brand, ink, sub, line, accent, f } = v;
   const cx = W / 2, maxW = W - PAD * 2;
   ctx.textAlign = "center";
 
@@ -613,35 +776,35 @@ function drawBroadsheet(ctx, v) {
   ctx.beginPath(); ctx.moveTo(PAD, topY); ctx.lineTo(W - PAD, topY);
   ctx.moveTo(PAD, topY + 6); ctx.lineTo(W - PAD, topY + 6); ctx.stroke();
   const drY = topY + 6;
-  ctx.fillStyle = sub; ctx.font = "400 23px " + MONO; setTracking(ctx, "3px");
+  ctx.fillStyle = sub; ctx.font = "400 23px " + f.label; setTracking(ctx, "3px");
   ctx.fillText("NO. " + String(i + 1).padStart(2, "0") + " OF " + String(total).padStart(2, "0"), cx, drY + 44);
   setTracking(ctx, "0px");
 
   const ruleY = H - 232;
   ctx.strokeStyle = line; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(cx - 64, ruleY); ctx.lineTo(cx + 64, ruleY); ctx.stroke();
-  ctx.fillStyle = ink; ctx.font = "600 30px " + SANS; ctx.fillText(brand.name, cx, ruleY + 52);
-  ctx.fillStyle = sub; ctx.font = "400 26px " + SANS; ctx.fillText(brand.handle, cx, ruleY + 90);
+  ctx.fillStyle = ink; ctx.font = "600 30px " + f.body; ctx.fillText(brand.name, cx, ruleY + 52);
+  ctx.fillStyle = sub; ctx.font = "400 26px " + f.body; ctx.fillText(brand.handle, cx, ruleY + 90);
   drawProgress(ctx, v);
 
   const zoneTop = drY + 92, zoneBot = ruleY - 28;
-  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 96 : 82, 44, 4);
-  const hLine = hFit.size * 1.16;
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, f.headW + " __SIZE__ " + f.head, S(v, kind === "cover" ? 96 : 82), 44, 4);
+  const hLine = hFit.size * f.lead;
   const subText = slide.summary || slide.sub || "";
-  const subSize = 32; ctx.font = "400 " + subSize + "px " + SANS;
+  const subSize = 32; ctx.font = "400 " + subSize + "px " + f.body;
   const sLines = subText ? wrap(ctx, subText, maxW - 60).slice(0, 6) : [];
   const sLine = subSize * 1.4; const gap = sLines.length ? 44 : 0;
   const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
   let y = zoneTop + (zoneBot - zoneTop - blockH) / 2 + hFit.size;
-  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
   hFit.lines.forEach((ln, k) => ctx.fillText(ln, cx, y + k * hLine));
   if (sLines.length) {
     const sy = y + (hFit.lines.length - 1) * hLine + gap;
-    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
     sLines.forEach((ln, k) => ctx.fillText(ln, cx, sy + k * sLine));
   }
   if (kind === "close") {
-    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label; setTracking(ctx, "1px");
     ctx.fillText("Educational content, not individualized advice.", cx, Math.min(y + blockH + 54, ruleY - 26));
     setTracking(ctx, "0px");
   }
@@ -651,18 +814,18 @@ function drawBroadsheet(ctx, v) {
 // Template 3: Index. An oversized slide numeral anchors the composition, with
 // the headline set beneath it. Minimal and modern.
 function drawIndexLayout(ctx, v) {
-  const { W, H, PAD, slide, i, total, kind, brand, ink, sub, line, accent, hasImg } = v;
+  const { W, H, PAD, slide, i, total, kind, brand, ink, sub, line, accent, hasImg, f } = v;
   const maxW = W - PAD * 2;
   ctx.textAlign = "left";
 
   const headY = PAD + 30;
-  ctx.fillStyle = sub; ctx.font = "500 28px " + MONO; setTracking(ctx, "2px");
+  ctx.fillStyle = sub; ctx.font = "500 28px " + f.label; setTracking(ctx, "2px");
   ctx.textAlign = "right"; ctx.fillText("/ " + String(total).padStart(2, "0"), W - PAD, headY); ctx.textAlign = "left"; setTracking(ctx, "0px");
 
   // Oversized numeral. Filled on the cover, outlined elsewhere, for rhythm.
   const num = String(i + 1).padStart(2, "0");
   const numSize = 300;
-  ctx.font = "500 " + numSize + "px " + SERIF;
+  ctx.font = "500 " + numSize + "px " + f.head;
   const numY = PAD + 100 + numSize * 0.74;
   ctx.lineWidth = 3; ctx.strokeStyle = accent; ctx.fillStyle = accent;
   if (kind === "cover") { ctx.globalAlpha = 0.95; ctx.fillText(num, PAD - 6, numY); }
@@ -672,10 +835,10 @@ function drawIndexLayout(ctx, v) {
   const ruleY = H - 232;
   ctx.strokeStyle = line; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(PAD, ruleY); ctx.lineTo(W - PAD, ruleY); ctx.stroke();
-  ctx.fillStyle = ink; ctx.font = "600 30px " + SANS; ctx.fillText(brand.name, PAD, ruleY + 50);
-  ctx.fillStyle = sub; ctx.font = "400 26px " + SANS; ctx.fillText(brand.handle, PAD, ruleY + 88);
+  ctx.fillStyle = ink; ctx.font = "600 30px " + f.body; ctx.fillText(brand.name, PAD, ruleY + 50);
+  ctx.fillStyle = sub; ctx.font = "400 26px " + f.body; ctx.fillText(brand.handle, PAD, ruleY + 88);
   if (kind === "cover" && total > 1) {
-    ctx.fillStyle = accent; ctx.font = "500 24px " + MONO; setTracking(ctx, "3px");
+    ctx.fillStyle = accent; ctx.font = "500 24px " + f.label; setTracking(ctx, "3px");
     ctx.textAlign = "right"; ctx.fillText("SWIPE →", W - PAD, ruleY + 56); ctx.textAlign = "left"; setTracking(ctx, "0px");
   } else {
     ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(W - PAD - 6, ruleY + 44, 7, 0, Math.PI * 2); ctx.fill();
@@ -683,23 +846,23 @@ function drawIndexLayout(ctx, v) {
   drawProgress(ctx, v);
 
   const zoneTop = numY + 36, zoneBot = ruleY - 24;
-  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 90 : 78, 44, 4);
-  const hLine = hFit.size * 1.1;
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, f.headW + " __SIZE__ " + f.head, S(v, kind === "cover" ? 90 : 78), 44, 4);
+  const hLine = hFit.size * f.lead;
   const subText = slide.summary || slide.sub || "";
-  const subSize = 34; ctx.font = "400 " + subSize + "px " + SANS;
+  const subSize = 34; ctx.font = "400 " + subSize + "px " + f.body;
   const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 5) : [];
   const sLine = subSize * 1.4; const gap = sLines.length ? 44 : 0;
   const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
   let y = zoneTop + Math.max(0, (zoneBot - zoneTop - blockH) / 2) + hFit.size;
-  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
   hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
   if (sLines.length) {
     const sy = y + (hFit.lines.length - 1) * hLine + gap;
-    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
     sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
   }
   if (kind === "close") {
-    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label; setTracking(ctx, "1px");
     ctx.fillText("Educational content, not individualized advice.", PAD, Math.min(y + blockH + 52, ruleY - 24));
     setTracking(ctx, "0px");
   }
@@ -728,7 +891,7 @@ function drawCover(ctx, img, w, h) {
 // Template 7: Frame. A thin inset border like a gallery placard, everything
 // centered inside it.
 function drawFrame(ctx, v) {
-  const { W, H, slide, i, total, kind, ink, sub, line, accent } = v;
+  const { W, H, slide, i, total, kind, ink, sub, line, accent, f } = v;
   const ruleY = H - 232;
   const fx = 64, fy = 64, fw = W - 128, fb = ruleY - 30;
   ctx.strokeStyle = accent; ctx.lineWidth = 3;
@@ -736,28 +899,28 @@ function drawFrame(ctx, v) {
   ctx.strokeStyle = line; ctx.lineWidth = 1;
   ctx.strokeRect(fx + 14, fy + 14, fw - 28, fb - fy - 28);
   ctx.textAlign = "center";
-  ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "4px");
+  ctx.fillStyle = sub; ctx.font = "500 26px " + f.label; setTracking(ctx, "4px");
   ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W / 2, fy + 84);
   setTracking(ctx, "0px");
   const maxW = fw - 160;
-  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 92 : 78, 44, 4);
-  const hLine = hFit.size * 1.16;
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, f.headW + " __SIZE__ " + f.head, S(v, kind === "cover" ? 92 : 78), 44, 4);
+  const hLine = hFit.size * f.lead;
   const subText = slide.summary || slide.sub || "";
-  const subSize = 32; ctx.font = "400 " + subSize + "px " + SANS;
+  const subSize = 32; ctx.font = "400 " + subSize + "px " + f.body;
   const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 6) : [];
   const sLine = subSize * 1.4; const gap = sLines.length ? 46 : 0;
   const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
   const zoneTop = fy + 120, zoneBot = fb - 60;
   const y = zoneTop + Math.max(0, (zoneBot - zoneTop - blockH) / 2) + hFit.size;
-  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
   hFit.lines.forEach((ln, k) => ctx.fillText(ln, W / 2, y + k * hLine));
   if (sLines.length) {
     const sy = y + (hFit.lines.length - 1) * hLine + gap;
-    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
     sLines.forEach((ln, k) => ctx.fillText(ln, W / 2, sy + k * sLine));
   }
   if (kind === "close") {
-    ctx.fillStyle = sub; ctx.font = "400 20px " + MONO;
+    ctx.fillStyle = sub; ctx.font = "400 20px " + f.label;
     ctx.fillText("Educational content, not individualized advice.", W / 2, fb - 40);
   }
   ctx.textAlign = "left";
@@ -768,7 +931,7 @@ function drawFrame(ctx, v) {
 // Template 8: Split. A bold accent panel carries the headline; supporting
 // text sits below on the page color.
 function drawSplit(ctx, v) {
-  const { W, H, PAD, slide, i, total, kind, theme, ink, sub, hasImg, accent } = v;
+  const { W, H, PAD, slide, i, total, kind, theme, ink, sub, hasImg, accent, f } = v;
   const ruleY = H - 232;
   const panelH = Math.round(H * 0.44);
   ctx.save();
@@ -776,19 +939,19 @@ function drawSplit(ctx, v) {
   ctx.fillStyle = accent;
   ctx.fillRect(0, 0, W, panelH);
   ctx.restore();
-  ctx.fillStyle = theme.chipInk; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.fillStyle = theme.chipInk; ctx.font = "500 26px " + f.label; setTracking(ctx, "2px");
   ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), PAD, 100);
   setTracking(ctx, "0px");
   const maxW = W - PAD * 2;
-  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 94 : 80, 44, 4);
-  const hLine = hFit.size * 1.08;
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, f.headW + " __SIZE__ " + f.head, S(v, kind === "cover" ? 94 : 80), 44, 4);
+  const hLine = hFit.size * f.lead;
   const blockH = hFit.lines.length * hLine;
   const y = 150 + Math.max(0, (panelH - 190 - blockH) / 2) + hFit.size;
-  ctx.fillStyle = theme.chipInk; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  ctx.fillStyle = theme.chipInk; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
   hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
   const subText = slide.summary || slide.sub || "";
   if (subText) {
-    const subSize = 36; ctx.font = "400 " + subSize + "px " + SANS;
+    const subSize = 36; ctx.font = "400 " + subSize + "px " + f.body;
     const sLines = wrap(ctx, subText, maxW).slice(0, 6);
     const sLine = subSize * 1.45;
     ctx.fillStyle = ink;
@@ -796,7 +959,7 @@ function drawSplit(ctx, v) {
     sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
   }
   if (kind === "close") {
-    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label; setTracking(ctx, "1px");
     ctx.fillText("Educational content, not individualized advice.", PAD, ruleY - 34);
     setTracking(ctx, "0px");
   }
@@ -806,27 +969,27 @@ function drawSplit(ctx, v) {
 
 // Template 9: Band. The headline is knocked out of a full-width accent band.
 function drawBand(ctx, v) {
-  const { W, H, PAD, slide, i, total, kind, theme, sub, accent } = v;
+  const { W, H, PAD, slide, i, total, kind, theme, sub, accent, f } = v;
   const ruleY = H - 232;
-  ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.fillStyle = sub; ctx.font = "500 26px " + f.label; setTracking(ctx, "2px");
   ctx.textAlign = "right";
   ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, PAD + 26);
   ctx.textAlign = "left"; setTracking(ctx, "0px");
   const maxW = W - PAD * 2;
-  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 88 : 76, 44, 4);
-  const hLine = hFit.size * 1.14;
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, f.headW + " __SIZE__ " + f.head, S(v, kind === "cover" ? 88 : 76), 44, 4);
+  const hLine = hFit.size * f.lead;
   const bandPadY = 58;
   const bandH = hFit.lines.length * hLine + bandPadY * 2 - (hLine - hFit.size);
   const bandTop = Math.round(H * 0.3);
   ctx.fillStyle = accent;
   ctx.fillRect(0, bandTop, W, bandH);
   ctx.fillStyle = theme.chipInk;
-  ctx.font = "500 " + hFit.size + "px " + SERIF;
+  ctx.font = f.headW + " " + hFit.size + "px " + f.head;
   const y = bandTop + bandPadY + hFit.size - 12;
   hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
   const subText = slide.summary || slide.sub || "";
   if (subText) {
-    const subSize = 34; ctx.font = "400 " + subSize + "px " + SANS;
+    const subSize = 34; ctx.font = "400 " + subSize + "px " + f.body;
     const sLines = wrap(ctx, subText, maxW).slice(0, 5);
     const sLine = subSize * 1.42;
     ctx.fillStyle = sub;
@@ -834,7 +997,7 @@ function drawBand(ctx, v) {
     sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
   }
   if (kind === "close") {
-    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO;
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label;
     ctx.fillText("Educational content, not individualized advice.", PAD, ruleY - 34);
   }
   drawFooterLeft(ctx, v, ruleY);
@@ -844,20 +1007,20 @@ function drawBand(ctx, v) {
 // Template 10: Corner. Headline anchored high, an oversized numeral tucked
 // into the lower right corner.
 function drawCorner(ctx, v) {
-  const { W, H, PAD, slide, i, total, kind, ink, sub, accent } = v;
+  const { W, H, PAD, slide, i, total, kind, ink, sub, accent, f } = v;
   const ruleY = H - 232;
-  ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.fillStyle = sub; ctx.font = "500 26px " + f.label; setTracking(ctx, "2px");
   ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), PAD, PAD + 26);
   setTracking(ctx, "0px");
   const maxW = W - PAD * 2;
-  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 96 : 82, 46, 4);
-  const hLine = hFit.size * 1.12;
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, f.headW + " __SIZE__ " + f.head, S(v, kind === "cover" ? 96 : 82), 46, 4);
+  const hLine = hFit.size * f.lead;
   const y = PAD + 140 + hFit.size;
-  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
   hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
   const subText = slide.summary || slide.sub || "";
   if (subText) {
-    const subSize = 34; ctx.font = "400 " + subSize + "px " + SANS;
+    const subSize = 34; ctx.font = "400 " + subSize + "px " + f.body;
     const sLines = wrap(ctx, subText, maxW).slice(0, 5);
     const sLine = subSize * 1.42;
     ctx.fillStyle = sub;
@@ -865,18 +1028,436 @@ function drawCorner(ctx, v) {
     sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
   }
   const num = String(i + 1).padStart(2, "0");
-  ctx.font = "500 260px " + SERIF;
+  ctx.font = "500 260px " + f.head;
   ctx.textAlign = "right";
   ctx.lineWidth = 3; ctx.strokeStyle = accent;
   if (kind === "cover") { ctx.fillStyle = accent; ctx.globalAlpha = 0.92; ctx.fillText(num, W - PAD + 6, ruleY - 44); }
   else { ctx.globalAlpha = 0.8; ctx.strokeText(num, W - PAD + 6, ruleY - 44); }
   ctx.globalAlpha = 1; ctx.textAlign = "left";
   if (kind === "close") {
-    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO;
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label;
     ctx.fillText("Educational content, not individualized advice.", PAD, ruleY - 34);
   }
   drawFooterLeft(ctx, v, ruleY);
   drawProgress(ctx, v);
+}
+
+// ---------------------------------------------------------------------------
+// Template 11: Dispatch. A section label over a hairline, a top-anchored
+// headline, a short accent rule, then the supporting sentence on a narrow
+// measure. The rhythm of a daily paper's section front.
+// ---------------------------------------------------------------------------
+function drawDispatch(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, kicker, ink, sub, line, accent, f } = v;
+  const maxW = W - PAD * 2;
+  const topY = PAD + 22;
+  ctx.textAlign = "left"; ctx.fillStyle = accent; ctx.font = "500 24px " + f.label; setTracking(ctx, "3px");
+  ctx.fillText(String(kicker || "").toUpperCase().slice(0, 30), PAD, topY);
+  ctx.textAlign = "right"; ctx.fillStyle = sub;
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, topY);
+  setTracking(ctx, "0px"); ctx.textAlign = "left";
+  ctx.strokeStyle = line; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(PAD, topY + 28); ctx.lineTo(W - PAD, topY + 28); ctx.stroke();
+
+  const ruleY = H - 232;
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+
+  const zoneTop = topY + 96, zoneBot = ruleY - 44;
+  setTracking(ctx, f.track || "0px");
+  const hFit = fitBlock(ctx, HT(v, slide.title || slide.headline || ""), maxW, headFont(v),
+                        S(v, kind === "cover" ? 100 : 86), 44, 4, f.lead, (zoneBot - zoneTop) * 0.62);
+  const hLine = hFit.size * f.lead;
+  setTracking(ctx, "0px");
+  const subText = slide.summary || slide.sub || "";
+  const subSize = 34; ctx.font = "400 " + subSize + "px " + f.body;
+  const sLines = subText ? wrap(ctx, subText, maxW * 0.88).slice(0, 6) : [];
+  const sLine = subSize * 1.45;
+  const blockH = hFit.lines.length * hLine + (sLines.length ? 122 - hFit.size + sLines.length * sLine : 51);
+  // Sits above center, the way a section front carries its lead story.
+  const y = zoneTop + Math.max(0, (zoneBot - zoneTop - blockH) * 0.34) + hFit.size;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
+  setTracking(ctx, f.track || "0px");
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  setTracking(ctx, "0px");
+
+  const afterHead = y + (hFit.lines.length - 1) * hLine;
+  ctx.fillStyle = accent; ctx.fillRect(PAD, afterHead + 46, 104, 5);
+  if (sLines.length) {
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, afterHead + 122 + k * sLine));
+  }
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label; setTracking(ctx, "1px");
+    ctx.fillText("Educational content, not individualized advice.", PAD, ruleY - 34);
+    setTracking(ctx, "0px");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Template 12: Bulletin. A solid accent flag bleeding off the left edge
+// carries the section, with a heavy headline beneath it. Reads like a
+// newsweekly's cover line.
+// ---------------------------------------------------------------------------
+function drawBulletin(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, kicker, theme, ink, sub, line, accent, f } = v;
+  const maxW = W - PAD * 2;
+  const flagY = PAD - 20, flagH = 86;
+  const label = String(kicker || "").toUpperCase().slice(0, 26);
+  ctx.font = "600 28px " + f.label; setTracking(ctx, "4px");
+  const flagW = Math.min(560, ctx.measureText(label).width + PAD + 56);
+  ctx.fillStyle = accent; ctx.fillRect(0, flagY, flagW, flagH);
+  ctx.fillStyle = theme.chipInk; ctx.textAlign = "left";
+  ctx.fillText(label, PAD - 40, flagY + 55);
+  setTracking(ctx, "2px"); ctx.fillStyle = sub; ctx.textAlign = "right"; ctx.font = "500 26px " + f.label;
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, flagY + 55);
+  ctx.textAlign = "left"; setTracking(ctx, "0px");
+
+  const ruleY = H - 232;
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+
+  const zoneTop = flagY + flagH + 70, zoneBot = ruleY - 44;
+  setTracking(ctx, f.track || "0px");
+  const hFit = fitBlock(ctx, HT(v, slide.title || slide.headline || ""), maxW, headFont(v),
+                        S(v, kind === "cover" ? 98 : 86), 44, 4, f.lead, (zoneBot - zoneTop) * 0.6);
+  const hLine = hFit.size * f.lead;
+  setTracking(ctx, "0px");
+  const subText = slide.summary || slide.sub || "";
+  const subSize = 34; ctx.font = "400 " + subSize + "px " + f.body;
+  const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 6) : [];
+  const sLine = subSize * 1.44;
+  const blockH = hFit.lines.length * hLine + (sLines.length ? 122 + sLines.length * sLine : 0);
+  const y = zoneTop + Math.max(0, (zoneBot - zoneTop - blockH) * 0.3) + hFit.size;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
+  setTracking(ctx, f.track || "0px");
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  setTracking(ctx, "0px");
+
+  if (sLines.length) {
+    const barY = y + (hFit.lines.length - 1) * hLine + 60;
+    ctx.strokeStyle = line; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(PAD, barY); ctx.lineTo(W - PAD, barY); ctx.stroke();
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, barY + 62 + k * sLine));
+  }
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label;
+    ctx.fillText("Educational content, not individualized advice.", PAD, ruleY - 34);
+  }
+}
+
+// Pull a leading figure out of a sentence so it can be set large.
+function splitStat(text) {
+  const s = String(text || "").trim();
+  const m = s.match(/\$?\d[\d,]*(\.\d+)?\s*(%|x|k|m|bn|percent)?/i);
+  if (!m) return { num: "", rest: s };
+  const num = m[0].trim();
+  const rest = (s.slice(0, m.index) + s.slice(m.index + m[0].length)).replace(/\s{2,}/g, " ").replace(/^[\s,.;:]+/, "").trim();
+  return { num, rest: rest || s };
+}
+
+// ---------------------------------------------------------------------------
+// Template 13: Figure. Pulls the number out of the sentence and sets it at
+// display size, the way a paper pulls a statistic out of a story. Falls back
+// to a hairline-framed statement when there is no number to pull.
+// ---------------------------------------------------------------------------
+function drawStat(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, kicker, ink, sub, line, accent, f } = v;
+  const maxW = W - PAD * 2;
+  const headY = PAD + 26;
+  ctx.fillStyle = sub; ctx.font = "500 26px " + f.label; setTracking(ctx, "2px");
+  ctx.textAlign = "left"; ctx.fillText(String(kicker || "").toUpperCase().slice(0, 24), PAD, headY);
+  ctx.textAlign = "right"; ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, headY);
+  ctx.textAlign = "left"; setTracking(ctx, "0px");
+  const ruleY = H - 232;
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+
+  const text = slide.title || slide.headline || "";
+  const { num, rest } = splitStat(text);
+  const subText = slide.summary || slide.sub || "";
+  let cursor = headY + 120;
+
+  if (num) {
+    const numSize = fitOneLine(ctx, num, maxW, f.headW + " __SIZE__ " + f.head, S(v, 300), 120);
+    ctx.fillStyle = accent; ctx.font = f.headW + " " + numSize + "px " + f.head;
+    ctx.fillText(num, PAD - 4, cursor + numSize * 0.78);
+    cursor += numSize * 0.94 + 30;
+    ctx.strokeStyle = line; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(PAD, cursor); ctx.lineTo(W - PAD, cursor); ctx.stroke();
+    cursor += 56;
+    setTracking(ctx, f.track || "0px");
+    const rFit = fitText(ctx, HT(v, rest), maxW, headFont(v), S(v, 62), 38, 3);
+    ctx.fillStyle = ink; ctx.font = f.headW + " " + rFit.size + "px " + f.head;
+    const rLine = rFit.size * f.lead;
+    rFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, cursor + rFit.size + k * rLine));
+    setTracking(ctx, "0px");
+    cursor += rFit.size + (rFit.lines.length - 1) * rLine + 54;
+  } else {
+    ctx.fillStyle = accent; ctx.fillRect(PAD, cursor, 160, 6);
+    cursor += 76;
+    setTracking(ctx, f.track || "0px");
+    const hFit = fitText(ctx, HT(v, text), maxW, headFont(v), S(v, kind === "cover" ? 100 : 88), 44, 5);
+    ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
+    const hLine = hFit.size * f.lead;
+    hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, cursor + hFit.size + k * hLine));
+    setTracking(ctx, "0px");
+    cursor += hFit.size + (hFit.lines.length - 1) * hLine + 50;
+  }
+
+  if (subText) {
+    const subSize = 33; ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
+    const sLines = wrap(ctx, subText, maxW * 0.92).slice(0, 5); const sLine = subSize * 1.44;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, Math.min(cursor, ruleY - 130) + k * sLine));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Template 14: Ticker. An accent rule across the very top, a monospace
+// dateline, and a tight headline over a strip of ticks. Market-wire feel.
+// ---------------------------------------------------------------------------
+function drawTicker(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, kicker, ink, sub, line, accent, f } = v;
+  const maxW = W - PAD * 2;
+  ctx.fillStyle = accent; ctx.fillRect(0, 0, W, 14);
+  const headY = PAD + 34;
+  ctx.fillStyle = accent; ctx.fillRect(PAD, headY - 18, 18, 18);
+  ctx.fillStyle = sub; ctx.font = "400 25px " + f.label; setTracking(ctx, "3px"); ctx.textAlign = "left";
+  ctx.fillText(String(kicker || "").toUpperCase().slice(0, 24), PAD + 34, headY - 2);
+  ctx.textAlign = "right";
+  ctx.fillText(String(i + 1).padStart(2, "0") + "/" + String(total).padStart(2, "0"), W - PAD, headY - 2);
+  ctx.textAlign = "left"; setTracking(ctx, "0px");
+
+  const ruleY = H - 232;
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+
+  const zoneTop = headY + 110;
+  setTracking(ctx, f.track || "0px");
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, headFont(v), S(v, kind === "cover" ? 96 : 84), 44, 4);
+  const hLine = hFit.size * f.lead;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
+  const y = zoneTop + hFit.size;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  setTracking(ctx, "0px");
+
+  const stripY = y + (hFit.lines.length - 1) * hLine + 56;
+  for (let t = 0; t < 22; t++) {
+    ctx.fillStyle = t % 3 === 0 ? accent : line;
+    ctx.fillRect(PAD + t * 38, stripY, 16, 4);
+  }
+  const subText = slide.summary || slide.sub || "";
+  if (subText) {
+    const subSize = 33; ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
+    const sLines = wrap(ctx, subText, maxW).slice(0, 6); const sLine = subSize * 1.44;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, stripY + 74 + k * sLine));
+  }
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 22px " + f.label;
+    ctx.fillText("Educational content, not individualized advice.", PAD, ruleY - 34);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Template 15: Cover Story. A wide letterspaced masthead across the top,
+// then the headline anchored low over a full-width rule. Magazine cover.
+// ---------------------------------------------------------------------------
+function drawCoverStory(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, kicker, ink, sub, line, accent, f } = v;
+  const maxW = W - PAD * 2;
+  const mastY = PAD + 66;
+  ctx.textAlign = "center"; setTracking(ctx, "14px");
+  const mast = String(kicker || "The Desk").toUpperCase().slice(0, 18);
+  const mSize = fitOneLine(ctx, mast, maxW, "500 __SIZE__ " + f.head, 78, 34);
+  ctx.fillStyle = ink; ctx.font = "500 " + mSize + "px " + f.head;
+  ctx.fillText(mast, W / 2 + 7, mastY);
+  setTracking(ctx, "0px");
+  ctx.strokeStyle = line; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(PAD, mastY + 34); ctx.lineTo(W - PAD, mastY + 34); ctx.stroke();
+  ctx.textAlign = "left";
+  ctx.fillStyle = sub; ctx.font = "400 24px " + f.label; setTracking(ctx, "3px");
+  ctx.fillText("NO. " + String(i + 1).padStart(2, "0"), PAD, mastY + 76);
+  ctx.textAlign = "right"; ctx.fillText("OF " + String(total).padStart(2, "0"), W - PAD, mastY + 76);
+  ctx.textAlign = "left"; setTracking(ctx, "0px");
+
+  const ruleY = H - 232;
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+
+  const subText = slide.summary || slide.sub || "";
+  setTracking(ctx, f.track || "0px");
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), maxW, headFont(v), S(v, kind === "cover" ? 104 : 90), 46, 4);
+  const hLine = hFit.size * f.lead;
+  setTracking(ctx, "0px");
+  const subSize = 32; ctx.font = "400 " + subSize + "px " + f.body;
+  const sLines = subText ? wrap(ctx, subText, maxW * 0.94).slice(0, 5) : [];
+  const sLine = subSize * 1.45, gap = sLines.length ? 52 : 0;
+  const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
+  // Anchored low, like a cover line, but not jammed against the byline.
+  const zoneTop = mastY + 130, zoneBot = ruleY - 56;
+  const y = zoneTop + Math.max(0, (zoneBot - zoneTop - blockH) * 0.72) + hFit.size;
+  ctx.fillStyle = accent; ctx.fillRect(PAD, y - hFit.size - 44, maxW, 5);
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
+  setTracking(ctx, f.track || "0px");
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  setTracking(ctx, "0px");
+  if (sLines.length) {
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
+    const sy = y + (hFit.lines.length - 1) * hLine + gap;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Template 16: Caption Card. The photograph runs clean across the top with
+// no scrim, and the words sit on a paper card below it, like a picture desk
+// caption. Without a photo the top becomes a solid color plate.
+// ---------------------------------------------------------------------------
+function drawCaptionCard(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, kicker, theme, hasImg, accent, f, brand } = v;
+  const cardTop = Math.round(H * 0.55);
+  if (!hasImg) {
+    ctx.fillStyle = theme.coverBg; ctx.fillRect(0, 0, W, cardTop);
+    ctx.fillStyle = theme.coverSub; ctx.font = "400 26px " + f.label; setTracking(ctx, "4px");
+    ctx.fillText(String(kicker || "").toUpperCase().slice(0, 26), PAD, PAD + 30);
+    setTracking(ctx, "0px");
+    ctx.fillStyle = accent; ctx.fillRect(PAD, cardTop - 118, 96, 5);
+  }
+  ctx.fillStyle = theme.bg; ctx.fillRect(0, cardTop, W, H - cardTop);
+  ctx.fillStyle = accent; ctx.fillRect(0, cardTop, W, 6);
+
+  const ink = theme.ink, sub = theme.sub, line = theme.line;
+  const maxW = W - PAD * 2;
+  ctx.textAlign = "left";
+  ctx.fillStyle = accent; ctx.font = "500 23px " + f.label; setTracking(ctx, "3px");
+  ctx.fillText(String(kicker || "").toUpperCase().slice(0, 26), PAD, cardTop + 64);
+  ctx.textAlign = "right"; ctx.fillStyle = sub;
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, cardTop + 64);
+  ctx.textAlign = "left"; setTracking(ctx, "0px");
+
+  // The card is a fixed box, so the type has to be measured against it or it
+  // will run into the byline.
+  const ruleY = H - 150;
+  const textTop = cardTop + 112, textBot = ruleY - 34;
+  const subText = slide.summary || slide.sub || "";
+  const subSize = 29, sLine = subSize * 1.42;
+  setTracking(ctx, f.track || "0px");
+  const hFit = fitBlock(ctx, HT(v, slide.title || slide.headline || ""), maxW, headFont(v),
+                        S(v, 60), 34, 3, f.lead, (textBot - textTop) * (subText ? 0.5 : 0.9));
+  const hLine = hFit.size * f.lead;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
+  const y = textTop + hFit.size;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  setTracking(ctx, "0px");
+
+  if (subText) {
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
+    const sy = y + (hFit.lines.length - 1) * hLine + 46;
+    const room = Math.max(0, Math.floor((textBot - sy) / sLine) + 1);
+    const sLines = wrap(ctx, subText, maxW).slice(0, Math.min(4, room));
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
+  }
+  ctx.strokeStyle = line; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(PAD, ruleY); ctx.lineTo(W - PAD, ruleY); ctx.stroke();
+  ctx.fillStyle = ink; ctx.font = "600 28px " + f.body; ctx.fillText(brand.name, PAD, ruleY + 46);
+  ctx.fillStyle = sub; ctx.font = "400 24px " + f.body;
+  ctx.textAlign = "right"; ctx.fillText(brand.handle, W - PAD, ruleY + 46); ctx.textAlign = "left";
+  if (total > 1) {
+    const segGap = 9, segW = (W - PAD * 2 - segGap * (total - 1)) / total;
+    for (let s = 0; s < total; s++) {
+      ctx.fillStyle = s <= i ? accent : line;
+      roundRect(ctx, PAD + s * (segW + segGap), H - 78, segW, 5, 2.5); ctx.fill();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Template 17: Column. Text set in a single narrow column against a vertical
+// hairline, with rules top and bottom. The most print-like of the set.
+// ---------------------------------------------------------------------------
+function drawColumn(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, kicker, ink, sub, line, accent, f } = v;
+  const colW = Math.round((W - PAD * 2) * 0.68);
+  const topRule = PAD + 54, botRule = H - 300;
+  ctx.strokeStyle = line; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(PAD, topRule); ctx.lineTo(W - PAD, topRule);
+  ctx.moveTo(PAD, botRule); ctx.lineTo(W - PAD, botRule);
+  ctx.moveTo(PAD + colW + 46, topRule + 26); ctx.lineTo(PAD + colW + 46, botRule - 26); ctx.stroke();
+
+  ctx.fillStyle = accent; ctx.font = "500 24px " + f.label; setTracking(ctx, "3px"); ctx.textAlign = "left";
+  ctx.fillText(String(kicker || "").toUpperCase().slice(0, 22), PAD, topRule - 24);
+  ctx.textAlign = "right"; ctx.fillStyle = sub;
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, topRule - 24);
+  ctx.textAlign = "left"; setTracking(ctx, "0px");
+
+  const ruleY = H - 232;
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+
+  setTracking(ctx, f.track || "0px");
+  const hFit = fitText(ctx, HT(v, slide.title || slide.headline || ""), colW, headFont(v), S(v, kind === "cover" ? 82 : 72), 40, 5);
+  const hLine = hFit.size * f.lead;
+  setTracking(ctx, "0px");
+  const subText = slide.summary || slide.sub || "";
+  const subSize = 31; ctx.font = "400 " + subSize + "px " + f.body;
+  const sLines = subText ? wrap(ctx, subText, colW).slice(0, 6) : [];
+  const sLine = subSize * 1.46, gap = sLines.length ? 44 : 0;
+  const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
+  const y = topRule + 30 + Math.max(0, (botRule - topRule - 60 - blockH) / 2) + hFit.size;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
+  setTracking(ctx, f.track || "0px");
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  setTracking(ctx, "0px");
+  if (sLines.length) {
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
+    const sy = y + (hFit.lines.length - 1) * hLine + gap;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Template 18: Poster. One uppercase headline set edge to edge with tight
+// leading and almost no other furniture. Built to stop a scroll.
+// ---------------------------------------------------------------------------
+function drawPoster(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, kicker, ink, sub, line, accent, f } = v;
+  const maxW = W - PAD * 2;
+  const headY = PAD + 20;
+  ctx.fillStyle = sub; ctx.font = "500 24px " + f.label; setTracking(ctx, "3px"); ctx.textAlign = "left";
+  ctx.fillText(String(kicker || "").toUpperCase().slice(0, 22), PAD, headY);
+  ctx.textAlign = "right";
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, headY);
+  ctx.textAlign = "left"; setTracking(ctx, "0px");
+
+  const ruleY = H - 232;
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+
+  const subText = slide.summary || slide.sub || "";
+  setTracking(ctx, f.track || "-1px");
+  const text = String(slide.title || slide.headline || "").toUpperCase();
+  const subLead = subText ? 200 : 60;
+  const hFit = fitBlock(ctx, text, maxW, f.headW + " __SIZE__ " + f.head, S(v, 132), 52, 6,
+                        Math.min(f.lead, 1.06), (ruleY - 40) - (headY + 70) - subLead);
+  const hLine = hFit.size * Math.min(f.lead, 1.06);
+  setTracking(ctx, "0px");
+  const subSize = 31; ctx.font = "400 " + subSize + "px " + f.body;
+  const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 4) : [];
+  const sLine = subSize * 1.44, gap = sLines.length ? 60 : 0;
+  const blockH = hFit.lines.length * hLine + 34 + gap + sLines.length * sLine;
+  const zoneTop = headY + 70, zoneBot = ruleY - 40;
+  const y = zoneTop + Math.max(0, (zoneBot - zoneTop - blockH) / 2) + hFit.size;
+  ctx.fillStyle = ink; ctx.font = f.headW + " " + hFit.size + "px " + f.head;
+  setTracking(ctx, f.track || "-1px");
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  setTracking(ctx, "0px");
+  const afterHead = y + (hFit.lines.length - 1) * hLine + 34;
+  ctx.fillStyle = accent; ctx.fillRect(PAD, afterHead, 220, 8);
+  if (sLines.length) {
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + f.body;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, afterHead + 78 + k * sLine));
+  }
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -1629,6 +2210,8 @@ function ContentDesk() {
   const [activeThemeId, setActiveThemeId] = useState("ivory"); // concrete theme being rendered
   const [templateId, setTemplateId] = useState("editorial"); // user's choice (may be "surprise")
   const [activeTemplate, setActiveTemplate] = useState("editorial"); // concrete layout being rendered
+  const [fontsId, setFontsId] = useState("auto"); // "auto", a pairing id, or "surprise"
+  const [activeFontsId, setActiveFontsId] = useState("auto"); // concrete pairing, or "auto"
   const [brandName, setBrandName] = useState("Matthew Pindoley, SE-AWMA®");
   const [brandHandle, setBrandHandle] = useState("MatthewPindoley.com");
   const [disclaimer, setDisclaimer] = useState(DEFAULT_DISCLAIMER);
@@ -1672,6 +2255,7 @@ function ContentDesk() {
   const recentRef = useRef([]); // last few hooks/topics, to push the model off repeats
   const lastTplRef = useRef("editorial"); // last layout used, so "Surprise" can avoid repeats
   const lastThemeRef = useRef("ivory"); // last theme used, same reason
+  const lastFontRef = useRef("journal"); // last typeface pairing, same reason
   const autoBusyRef = useRef({}); // post ids currently being auto-sent
 
   // Scheduler: while this app is open, posts marked "scheduled" are sent to
@@ -1729,8 +2313,9 @@ function ContentDesk() {
     [brandName, brandHandle]
   );
   const drawOpts = useMemo(
-    () => ({ theme, template: activeTemplate, kicker: pillar.label.toUpperCase(), brand }),
-    [theme, activeTemplate, pillar.label, brand]
+    () => ({ theme, template: activeTemplate, kicker: pillar.label.toUpperCase(), brand,
+             fonts: resolveFonts(activeFontsId, activeTemplate) }),
+    [theme, activeTemplate, activeFontsId, pillar.label, brand]
   );
 
   // Picking a concrete layout updates the live preview immediately. "Surprise"
@@ -1744,16 +2329,25 @@ function ContentDesk() {
     if (themeId !== "surprise") setActiveThemeId(themeId);
   }, [themeId]);
 
+  // And for the typeface pairing.
+  useEffect(() => {
+    if (fontsId !== "surprise") setActiveFontsId(fontsId);
+  }, [fontsId]);
+
   useEffect(() => {
     let dead = false;
     (async () => {
       try {
-        await Promise.all([
-          document.fonts.load('500 100px "Newsreader"'),
-          document.fonts.load('600 30px "Inter Tight"'),
-          document.fonts.load('400 30px "Inter Tight"'),
-          document.fonts.load('500 26px "IBM Plex Mono"'),
-        ]);
+        // Every family the pairings can use, at the weights the slides draw.
+        // Canvas silently falls back to Georgia if a face is not loaded yet.
+        const jobs = [];
+        for (const fam of FONT_FAMILIES) {
+          for (const w of [400, 500, 600, 700, 800]) {
+            jobs.push(document.fonts.load(w + ' 80px "' + fam + '"').catch(() => {}));
+            jobs.push(document.fonts.load(w + ' 28px "' + fam + '"').catch(() => {}));
+          }
+        }
+        await Promise.all(jobs);
         await document.fonts.ready;
       } catch (e) {}
       if (!dead) setFontsReady(true);
@@ -1783,11 +2377,20 @@ function ContentDesk() {
     // Resolve the layout. "Surprise" rolls a random one, avoiding a repeat.
     let layout = templateId;
     if (templateId === "surprise") {
-      const choices = TEMPLATES.map((t) => t.id).filter((id) => id !== lastTplRef.current);
+      const choices = SURPRISE_TEMPLATES.filter((id) => id !== lastTplRef.current);
       layout = choices[Math.floor(Math.random() * choices.length)] || "editorial";
       setActiveTemplate(layout);
     }
     lastTplRef.current = layout;
+    // And the typeface pairing.
+    if (fontsId === "surprise") {
+      const picks = FONT_KEYS.filter((k) => k !== lastFontRef.current);
+      const fontPick = picks[Math.floor(Math.random() * picks.length)] || "journal";
+      setActiveFontsId(fontPick);
+      lastFontRef.current = fontPick;
+    } else if (fontsId !== "auto") {
+      lastFontRef.current = fontsId;
+    }
     // Same for the color theme.
     let themePick = themeId;
     if (themeId === "surprise") {
@@ -2180,7 +2783,16 @@ function ContentDesk() {
             ))}
           </div>
           {templateId === "surprise" && (
-            <div className="slider-note">A random layout is chosen on each Generate.</div>
+            <div className="slider-note">A random layout is chosen on each Generate. Silent is left out, so you never get a carousel with no words.</div>
+          )}
+          {templateId === "silent" && (
+            <div className="slider-note">
+              {photoMode === "off"
+                ? "Silent shows the photo by itself, so turn Slide photos on below. Without a photo these slides fall back to Editorial."
+                : photoMode === "cover"
+                  ? "Slide 1 will be the photo alone. The rest fall back to Editorial, since only the cover gets a photo."
+                  : "Every slide will be the photo alone, with no words on it."}
+            </div>
           )}
 
           <div className="ctrl-label">Carousel theme</div>
@@ -2204,6 +2816,23 @@ function ContentDesk() {
           {themeId === "surprise" && (
             <div className="slider-note">A random theme is chosen on each Generate.</div>
           )}
+
+          <div className="ctrl-label">Typeface</div>
+          <div className="layouts">
+            {[{ id: "auto", name: "Match layout", blurb: "Each layout uses the type it was drawn for." },
+              ...FONT_KEYS.map((id) => ({ id, name: FONT_SETS[id].name, blurb: FONT_SETS[id].blurb })),
+              { id: "surprise", name: "Surprise", blurb: "A random pairing each time you generate." }].map((o) => (
+              <button key={o.id} className={"tone" + (o.id === fontsId ? " on" : "")}
+                onClick={() => setFontsId(o.id)} title={o.blurb}>{o.name}</button>
+            ))}
+          </div>
+          <div className="slider-note">
+            {fontsId === "surprise"
+              ? "A random typeface pairing is chosen on each Generate."
+              : fontsId === "auto"
+                ? "Each layout uses the typeface it was designed around."
+                : FONT_SETS[fontsId].blurb}
+          </div>
 
           <div className="ctrl-label">Slide photos <span className="opt">optional</span></div>
           <div className="tones">
@@ -2366,7 +2995,7 @@ function ContentDesk() {
 }
 
 const css = `
-@import url('https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Inter+Tight:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Playfair+Display:wght@400;500;600;700&family=Libre+Franklin:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500;6..96,700&family=DM+Serif+Display&family=Lora:wght@400;500;600;700&family=Archivo:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;700&family=Oswald:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
 .desk {
   --bg:#0E1117; --panel:#161B24; --panel2:#1C222D; --line:#2A313E;

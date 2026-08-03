@@ -1,9 +1,12 @@
 # The Desk · new design system (fonts, palettes, layouts)
 
+**Status: merged into `index.html`.** The studio now ships 19 layouts, 18
+palettes, and 8 typeface pairings, with a Typeface control next to the layout
+and theme pickers.
+
 `design/desk-design-lab.html` is a standalone preview that renders every
 addition with the same canvas code the app uses. Open it in a browser to see
-the whole set. This file is the reference implementation; the app merges from
-it.
+the whole set side by side. It stays as the design reference.
 
 ## What is being added
 
