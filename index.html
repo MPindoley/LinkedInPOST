@@ -47,27 +47,87 @@ const PILLARS = [
   { id: "think", label: "Make Them Think", tag: "ASK",
     blurb: "A question post built purely for engagement.",
     directive: "Build the post around ONE thought-provoking question about money, values, or the future. Offer a short framing, then invite the reader to reflect or comment. Low on claims, high on curiosity." },
-  { id: "holiday", label: "Holiday / Seasonal", tag: "CAL",
-    blurb: "A seasonal hook into a planning theme.",
-    directive: "Tie the post to a holiday, season, or calendar moment (use the topic field if provided, otherwise pick a fitting one). Use the occasion as a warm hook into a relevant planning theme." },
+  { id: "holiday", label: "Holiday / Seasonal", tag: "CAL", general: true,
+    blurb: "A warm reflection on the holiday or season.",
+    directive: "Write a genuine, warm reflection on a holiday, season, or calendar moment (use the topic field if provided, otherwise pick a fitting one). Do NOT force a money, finance, investing, or planning angle. It is completely fine, and usually better, if finance is not mentioned at all. Keep it human, gracious, and reflective, the kind of thoughtful note a person shares on a holiday, focused on gratitude, meaning, people, or the season itself." },
+  { id: "funfact", label: "Fun Fact", tag: "FUN", general: true,
+    blurb: "A surprising fact, zero finance.",
+    directive: "Share ONE genuinely surprising, true, verifiable fun fact (science, nature, history, space, food, sports, animals, or culture). Use the topic field if provided; otherwise pick something delightful. Make it a great standalone fact people want to share. Do NOT connect it to money, finance, investing, business, or any lesson. Just the fascinating fact and why it is cool." },
+  { id: "fun", label: "Just for Fun", tag: "LOL", general: true,
+    blurb: "A light, clean joke or playful post.",
+    directive: "Write a short, clean, genuinely funny or playful post: a light joke, a witty observation, or a relatable everyday moment. Use the topic field if provided. Keep it professional-friendly and inclusive. Do NOT tie it to finance, money, business, or a lesson. The goal is warmth and personality." },
 ];
 
 const TONES = ["Educator", "Conversational", "Bold but careful"];
 const LEN_LABELS = ["Short", "Standard", "Long", "Max"];
 const LEN_WORDS = [80, 150, 230, 300];
 
-// Anthropic API. claude-haiku-4-5 is fast and cheap; claude-sonnet-4-6 is higher quality.
-const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_MODELS = [
-  { id: "claude-haiku-4-5-20251001", label: "Haiku" },
-  { id: "claude-sonnet-4-6", label: "Sonnet" },
+// OpenAI only. Pick the model used for drafting. gpt-4o-mini is fast and cheap;
+// gpt-4o is higher quality. You can add any chat model id your key can access.
+const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+const OPENAI_IMAGE_ENDPOINT = "https://api.openai.com/v1/images/generations";
+const OPENAI_MODELS = [
+  { id: "gpt-4o-mini", label: "4o mini" },
+  { id: "gpt-4o", label: "4o" },
 ];
 
-// Six restrained palettes. One palette runs across the whole carousel so the
+// Image generation is tried in order, so the app works whichever model your
+// account/key supports. gpt-image-1 is the current model (returns base64 by
+// default and rejects response_format / quality:"standard"); dall-e-3 is the
+// legacy fallback (needs response_format and its own size/quality values).
+const IMAGE_ATTEMPTS = [
+  { model: "gpt-image-1", extra: { size: "1024x1536" } },
+  { model: "dall-e-3", extra: { size: "1024x1792", quality: "standard", response_format: "b64_json" } },
+];
+
+// Where slide photos come from. Two of these are free.
+const PEXELS_ENDPOINT = "https://api.pexels.com/v1/search";
+const POLLINATIONS_ENDPOINT = "https://image.pollinations.ai/prompt/";
+const IMAGE_SOURCES = [
+  { id: "pexels", label: "Stock", note: "Free real photos. Needs a free Pexels API key (pexels.com/api)." },
+  { id: "pollinations", label: "Free AI", note: "Free AI images, no key needed." },
+  { id: "openai", label: "OpenAI", note: "Paid AI images, about 4 to 8 cents each." },
+];
+
+// Who writes the post text. Two of these are free.
+const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL = "llama-3.3-70b-versatile";
+const TEXT_SOURCES = [
+  { id: "openai", label: "OpenAI", note: "Uses your OpenAI key and the model below." },
+  { id: "groq", label: "Groq", note: "Free alternative. Needs a free Groq key (console.groq.com, no credit card)." },
+];
+
+// Whether to generate a real photo behind each slide (OpenAI image API).
+// "off" keeps the clean color slides; "cover" illustrates only slide 1
+// (cheapest/fastest); "all" gives every slide its own unique photo.
+const PHOTO_MODES = [
+  { id: "off", label: "Off" },
+  { id: "cover", label: "Cover" },
+  { id: "all", label: "Every slide" },
+];
+
+// Carousel layout templates (composition, separate from the color theme).
+const TEMPLATES = [
+  { id: "editorial", label: "Editorial", blurb: "Left-aligned, minimal index." },
+  { id: "broadsheet", label: "Broadsheet", blurb: "Centered WSJ masthead style." },
+  { id: "index", label: "Index", blurb: "Oversized slide numeral." },
+  { id: "ledger", label: "Ledger", blurb: "Left accent rail, top headline." },
+  { id: "feature", label: "Feature", blurb: "Headline anchored low, photo-friendly." },
+  { id: "quote", label: "Quote", blurb: "Oversized pull-quote mark." },
+  { id: "frame", label: "Frame", blurb: "Gallery card with an inset border." },
+  { id: "split", label: "Split", blurb: "Bold color panel carries the headline." },
+  { id: "band", label: "Band", blurb: "Headline knocked out of an accent band." },
+  { id: "corner", label: "Corner", blurb: "Headline high, big numeral in the corner." },
+];
+
+// A photographic house style appended to every image prompt so the set stays
+// cohesive, premium, and free of baked-in text.
+const IMAGE_STYLE =
+  "Professional editorial still-life or landscape photograph, minimalist and sophisticated. Muted, refined color palette, soft natural light, shallow depth of field, generous negative space, subtle film grain. Calm and trustworthy mood for a finance audience. Subject must be objects, places, architecture, nature, or textures. Absolutely NO people, no person, no faces, no hands, no human figures, no body parts, no portraits, no crowds, no silhouettes of people. No text, no words, no letters, no numbers, no logos, no charts, no graphs, no watermarks.";
+
+// Three restrained palettes. One palette runs across the whole carousel so the
 // set looks authored, not auto-generated. Each defines a calm cover/close
 // variant so slides 1 and 5 frame the set without breaking cohesion.
-// On each new generate, the palette rotates automatically so every carousel
-// looks distinct from the last.
 const THEMES = {
   ivory: {
     name: "Ivory",
@@ -87,31 +147,49 @@ const THEMES = {
     line: "#D0D5D7", chipInk: "#E8EBEC",
     coverBg: "#13242C", coverInk: "#EEF1F1", coverSub: "#8FA1A6",
   },
-  obsidian: {
-    name: "Obsidian",
-    bg: "#1C1C22", ink: "#EEEAE0", sub: "#8A8699", accent: "#B07ECD",
-    line: "#2E2C38", chipInk: "#1C1C22",
-    coverBg: "#0F0F14", coverInk: "#EEEAE0", coverSub: "#7A7688",
+  sage: {
+    name: "Sage",
+    bg: "#ECEEE9", ink: "#1F2A22", sub: "#5F6A60", accent: "#5E7C63",
+    line: "#DBE0DA", chipInk: "#ECEEE9",
+    coverBg: "#18211B", coverInk: "#EEF1EC", coverSub: "#9AA79C",
   },
-  parchment: {
-    name: "Parchment",
-    bg: "#F8F3E8", ink: "#2C1F0E", sub: "#7A6A52", accent: "#C04B2A",
-    line: "#E3D9C4", chipInk: "#F8F3E8",
-    coverBg: "#1E120A", coverInk: "#F8F3E8", coverSub: "#B09A7A",
+  navy: {
+    name: "Navy",
+    bg: "#111A2B", ink: "#EEF1F6", sub: "#8C98AC", accent: "#C8A24C",
+    line: "#233149", chipInk: "#111A2B",
+    coverBg: "#0C1322", coverInk: "#EEF1F6", coverSub: "#8693A8",
   },
-  ocean: {
-    name: "Ocean",
-    bg: "#EEF4F7", ink: "#0E2333", sub: "#4A6475", accent: "#1477A8",
-    line: "#D1DEE6", chipInk: "#EEF4F7",
-    coverBg: "#0A1D2E", coverInk: "#EEF4F7", coverSub: "#7A9BAE",
+  bordeaux: {
+    name: "Bordeaux",
+    bg: "#F1ECEA", ink: "#221A1A", sub: "#6B5E5C", accent: "#8C4A4A",
+    line: "#E0D6D3", chipInk: "#F1ECEA",
+    coverBg: "#211516", coverInk: "#F3ECEA", coverSub: "#B0A09E",
+  },
+  graphite: {
+    name: "Graphite",
+    bg: "#1B1D21", ink: "#ECEDEF", sub: "#9CA3AD", accent: "#8FB4C9",
+    line: "#2E3238", chipInk: "#1B1D21",
+    coverBg: "#131519", coverInk: "#EFF1F3", coverSub: "#8B939E",
+  },
+  forest: {
+    name: "Forest",
+    bg: "#152820", ink: "#EAF0E9", sub: "#94A896", accent: "#D9B36A",
+    line: "#24382E", chipInk: "#152820",
+    coverBg: "#0E1D16", coverInk: "#EEF3ED", coverSub: "#8CA08E",
+  },
+  sand: {
+    name: "Sand",
+    bg: "#F2E9DC", ink: "#2A211A", sub: "#77685A", accent: "#C0603A",
+    line: "#E2D5C2", chipInk: "#F2E9DC",
+    coverBg: "#241B14", coverInk: "#F4ECE1", coverSub: "#B3A18E",
+  },
+  plum: {
+    name: "Plum",
+    bg: "#F0EBF2", ink: "#241A2E", sub: "#6F6478", accent: "#6E4A8E",
+    line: "#DFD5E4", chipInk: "#F0EBF2",
+    coverBg: "#1D1226", coverInk: "#F2EDF5", coverSub: "#A697B3",
   },
 };
-const THEME_KEYS = Object.keys(THEMES);
-// Pick the next theme in rotation given the current one.
-function nextTheme(currentId) {
-  const idx = THEME_KEYS.indexOf(currentId);
-  return THEME_KEYS[(idx + 1) % THEME_KEYS.length];
-}
 
 const DEFAULT_DISCLAIMER =
   "Educational content only, not individualized financial, tax, or legal advice. Consult a qualified professional about your own situation.";
@@ -158,7 +236,77 @@ function cleanResult(r) {
   return c;
 }
 
-function buildSystemPrompt(pillar, tone, words, lenLabel) {
+// The exact JSON shape for the carousel array at a given slide count.
+function carouselSchema(n) {
+  const rows = ['    {"kind": "cover", "title": "...", "summary": "...", "image_prompt": "...", "image_query": "..."}'];
+  const points = n >= 3 ? n - 2 : 0;
+  for (let k = 0; k < points; k++) rows.push('    {"headline": "...", "sub": "...", "image_prompt": "...", "image_query": "..."}');
+  if (n >= 2) rows.push('    {"kind": "close", "title": "...", "sub": "...", "image_prompt": "...", "image_query": "..."}');
+  return "[\n" + rows.join(",\n") + "\n  ]";
+}
+
+// Plain-language description of the carousel structure at a given slide count.
+function carouselSpec(n) {
+  if (n <= 1) return "a single COVER slide only: a bold title that makes a complete statement (up to about 12 words) plus a one-sentence summary that finishes the thought. There are NO other slides.";
+  if (n === 2) return "a 2 slide carousel. Slide 1 is the COVER (a bold title that makes a complete statement, up to about 12 words, plus a one-sentence summary). Slide 2 is the CLOSER (see the CLOSER RULE).";
+  return "a " + n + " slide carousel. Slide 1 is the COVER (a bold title that makes a complete statement, up to about 12 words, plus a one-sentence summary of what the carousel delivers). Slides 2 to " + (n - 1) + " each carry ONE headline that is a COMPLETE THOUGHT, a full statement of up to about 12 words, never a fragment or teaser, plus a supporting subtext of 1 or 2 full sentences (up to about 28 words) that finishes the idea. Each slide must make sense on its own without the caption. Slide " + n + " is the CLOSER (see the CLOSER RULE).";
+}
+
+const VOICE_RULES = `WRITE LIKE A REAL PERSON, NOT AI. These rules are strict:
+- No inflated verbs. Use "use" not "utilize" or "leverage", "help" not "facilitate", "start" not "commence". NEVER use these words: delve, foster, navigate, robust, myriad, tapestry, landscape, realm, testament.
+- No throat-clearing openers such as "It's worth noting", "It's important to remember", "In today's world", "At the end of the day". Say the thing directly.
+- NEVER use the "not just X, but Y" or "it's not about X, it's about Y" construction.
+- Do not end with a summary sentence that restates what you already said. End on the actual last point.
+- No em dashes or en dashes anywhere. Use a period or a comma.
+- No forced rule-of-three (like "clear, concise, and compelling"). Do not triple things by default.
+- No hedging stacks like "can sometimes potentially help". Say what is true.
+- Vary sentence length hard. Mix long sentences with short punchy ones. A three word sentence is fine.
+- State opinions plainly. Take a position instead of staying neutral.
+- Be concrete. Use real numbers and specific examples over vague phrases like "various factors".
+- Use contractions.
+- It is fine to start a sentence with "And" or "But" when the rhythm calls for it.
+- End with a clear call to action when there is a point to drive home.`;
+
+function formatsAndJson(n, general) {
+  return `You will produce TWO formats of the SAME idea:
+1) A single LinkedIn text post: a strong scroll-stopping hook line, then short body lines, ending on a clear point. No hashtags in the body.
+2) A MINIMALIST image carousel: ${carouselSpec(n)} Every slide carries a complete thought written in real sentences, not clipped fragments like "The hidden cost" or "Why it matters". A reader who sees only that one slide should still learn something whole. Stay glanceable: a headline plus a sentence or two, never a paragraph.${n > 1 ? " The reader swipes the slides, then reads the full post caption for more." : ""}
+
+COVER TITLE RULE: the cover slide's "title" must be a punchy, specific, curiosity-grabbing headline about the topic itself, like a magazine cover line. NEVER use the post category name (such as "Myth vs Fact", "Fact to Lesson", "Concept Demystified", "Behavioral Finance", "Fun Fact", "Holiday") as, or inside, any slide title or the hook. Write about the subject, not the format.
+
+CLOSER RULE: the final slide must stay on the CONTENT and close the loop in an interesting way. Best options: the single most memorable takeaway restated sharply, a surprising kicker detail that reframes the topic, or a thought-provoking question about the subject itself. It must NOT be a call to action or a pitch. NEVER write anything like "contact me", "DM me", "let's chat", "reach out", "message me", "follow for more", "link in bio", "let's talk", "work with me", or any invitation to hire, message, or follow the author. The closer is the topic's mic drop, not an ad.
+
+For EVERY slide, also write an "image_prompt": a vivid, literal description of a single photographic scene that represents that slide's specific idea (a concrete object, place, or moment, not an abstraction). It becomes a real photo shown behind the slide text, so describe only what is in frame. Each image_prompt must be clearly DIFFERENT from the others. The scene must contain NO people: no person, no faces, no hands, no human figures, no crowds. Use objects, places, architecture, nature, or still-life scenes instead. Do NOT mention any text, words, letters, numbers, charts, or logos in the image_prompt. Also write an "image_query": 2 to 4 plain search keywords for a stock photo of that same scene (for example "misty mountain lake" or "marble desk still life"), with no people and no punctuation.
+
+Return ONLY valid JSON, no markdown, no code fences, in exactly this shape:
+{
+  "hook": "the opening line of the text post",
+  "body": "the rest of the text post, newline-separated, no hashtags",
+  "hashtags": ["#Tag", "#Tag", "#Tag", "#Tag"],
+  "carousel": ${carouselSchema(n)},
+  "reviewer_notes": ["${general ? "one thing to fact-check" : "one thing the compliance reviewer should double-check"}", "another"]
+}
+The "carousel" array MUST contain EXACTLY ${n} slide object(s), no more and no fewer. Keep hashtags to 3 or 4 relevant, non-spammy tags. Keep reviewer_notes to 2 short items specific to THIS post. Remember: no em dashes anywhere.`;
+}
+
+function buildSystemPrompt(pillar, tone, words, lenLabel, slideCount) {
+  const n = Math.max(1, Math.min(5, slideCount || 5));
+
+  // General (non-finance) pillars: no finance framing, no compliance block.
+  if (pillar.general) {
+    return `You are a ghostwriter creating fun, engaging, shareable social posts for a person's warm and human personal brand. This post is NOT about finance, money, investing, saving, or business, and must not drift into those topics or add a money "lesson", even if a topic is provided. Keep it genuinely entertaining, positive, inclusive, and clean. Anything you present as a fact must be true and verifiable.
+
+${VOICE_RULES}
+
+VOICE: First person, warm, ${tone}. Playful, human, and real.
+
+LENGTH: The text post must be at most about ${words} words (${lenLabel}). Be concise.
+
+POST TYPE FOR THIS REQUEST: ${pillar.label}. ${pillar.directive}
+
+${formatsAndJson(n, true)}`;
+  }
+
   return `You are a ghostwriter creating LinkedIn posts for a wealth-management financial advisor in the United States. Your output must be SUBMITTABLE to a broker-dealer / RIA compliance review with minimal edits.
 
 NON-NEGOTIABLE COMPLIANCE RULES (spirit of SEC Marketing Rule 206(4)-1 and FINRA Rule 2210):
@@ -170,33 +318,15 @@ NON-NEGOTIABLE COMPLIANCE RULES (spirit of SEC Marketing Rule 206(4)-1 and FINRA
 - NO fear-mongering or pressure. Balanced and fair.
 - Any real-world fact you cite must be accurate and verifiable; if unsure, choose a different fact.
 
-STRICT STYLE RULE: Do NOT use em dashes or en dashes anywhere in your output. Use commas, periods, or restructure the sentence instead. This rule is absolute.
+${VOICE_RULES}
 
-VOICE: First person, warm, ${tone}. Confident but humble. Concise. Written for an intelligent general audience, not for advisors.
+VOICE: First person, warm, ${tone}. Confident, plainspoken, human. Written for an intelligent general audience, not for advisors.
 
 LENGTH: The text post must be at most about ${words} words (${lenLabel}). Treat this as a ceiling, never pad toward it. Be as concise as the idea allows.
 
 POST TYPE FOR THIS REQUEST: ${pillar.label}. ${pillar.directive}
 
-You will produce TWO formats of the SAME idea:
-1) A single LinkedIn text post: a strong scroll-stopping hook line, then short body lines/paragraphs, ending with a soft, non-promotional invitation to reflect or reach out. No hashtags in the body. This caption is where the depth lives, so it can carry the full thought within the length ceiling.
-2) A MINIMALIST image carousel of 5 slides. The slides are visual and sparse, not paragraphs. Each slide carries very few words so it reads in one glance. Slide 1 is the COVER: a short bold title plus a one-line summary of what the carousel delivers. Slides 2-4 each carry ONE short headline (max about 8 words) plus an optional one-line subtext (max about 12 words). Slide 5 is a soft closing line. The reader swipes the minimal slides, then reads the full post caption for more. Keep slide text TIGHT: short headlines read better in a large serif and look more professional.
-
-Return ONLY valid JSON, no markdown, no code fences, in exactly this shape:
-{
-  "hook": "the opening line of the text post",
-  "body": "the rest of the text post, newline-separated, no hashtags",
-  "hashtags": ["#Tag", "#Tag", "#Tag", "#Tag"],
-  "carousel": [
-    {"kind": "cover", "title": "...", "summary": "..."},
-    {"headline": "...", "sub": "..."},
-    {"headline": "...", "sub": "..."},
-    {"headline": "...", "sub": "..."},
-    {"kind": "close", "title": "...", "sub": "..."}
-  ],
-  "reviewer_notes": ["one thing the compliance reviewer should double-check", "another"]
-}
-Keep hashtags to 4 relevant, non-spammy tags. Keep reviewer_notes to 2 short items specific to THIS post. Remember: no em dashes anywhere.`;
+${formatsAndJson(n, false)}`;
 }
 
 // ---- Canvas slide rendering -------------------------------------------------
@@ -232,158 +362,521 @@ function setTracking(ctx, v) {
   try { ctx.letterSpacing = v; } catch (e) {}
 }
 
-function drawSlide(canvas, slide, i, total, opts, overlayImg) {
-  const { theme, kicker, brand } = opts;
+function drawSlide(canvas, slide, i, total, opts, img) {
+  const { theme, kicker, brand, template } = opts;
   const W = 1080, H = 1350, PAD = 104;
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
   const kind = slide.kind;
   const isFrame = kind === "cover" || kind === "close";
-
-  const bg = isFrame ? theme.coverBg : theme.bg;
-  const ink = isFrame ? theme.coverInk : theme.ink;
-  const sub = isFrame ? theme.coverSub : theme.sub;
-  const line = isFrame ? "rgba(255,255,255,0.14)" : theme.line;
+  const hasImg = !!(img && img.width);
   const accent = theme.accent;
 
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-
-  // --- Optional image overlay: fills the background zone behind the text. ----
-  if (overlayImg) {
-    const imgZoneH = Math.round(H * 0.45); // top 45% of slide
-    const imgZoneY = 0;
-    // Draw image scaled to cover the zone, centered.
-    const scaleX = W / overlayImg.width;
-    const scaleY = imgZoneH / overlayImg.height;
-    const scale = Math.max(scaleX, scaleY);
-    const drawW = overlayImg.width * scale;
-    const drawH = overlayImg.height * scale;
-    const drawX = (W - drawW) / 2;
-    const drawY = imgZoneY + (imgZoneH - drawH) / 2;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, imgZoneY, W, imgZoneH);
-    ctx.clip();
-    ctx.drawImage(overlayImg, drawX, drawY, drawW, drawH);
-    ctx.restore();
-    // Gradient overlay so text remains legible
-    const grad = ctx.createLinearGradient(0, imgZoneY, 0, imgZoneY + imgZoneH);
-    grad.addColorStop(0, "rgba(0,0,0,0.18)");
-    grad.addColorStop(1, bg + "FF");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, imgZoneY, W, imgZoneH);
+  // Color scheme. Over a photo we always use light text on a dark scrim; on a
+  // plain slide we use the theme's ink/sub for the cover/close vs inner pages.
+  let ink, sub, line;
+  if (hasImg) {
+    ink = "#F7F4ED"; sub = "rgba(247,244,237,0.86)"; line = "rgba(255,255,255,0.30)";
+  } else if (isFrame) {
+    ink = theme.coverInk; sub = theme.coverSub; line = "rgba(255,255,255,0.14)";
+  } else {
+    ink = theme.ink; sub = theme.sub; line = theme.line;
   }
 
+  if (hasImg) {
+    drawCover(ctx, img, W, H);
+    // Vertical scrim tinted with the theme's dark color, so the selected theme
+    // still reads through the photo while keeping every line legible.
+    const tint = theme.coverBg;
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, hexToRgba(tint, 0.55));
+    g.addColorStop(0.46, hexToRgba(tint, 0.60));
+    g.addColorStop(1, hexToRgba(tint, 0.92));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.fillStyle = isFrame ? theme.coverBg : theme.bg;
+    ctx.fillRect(0, 0, W, H);
+  }
   ctx.textBaseline = "alphabetic";
 
-  // --- Header: kicker (left) + index (right). One thin accent rule below. ----
-  const headY = PAD + 26;
-  ctx.fillStyle = accent;
-  ctx.font = "500 26px " + MONO;
-  setTracking(ctx, "4px");
-  if (kind === "cover") {
-    // Cover gets a filled accent chip so slide 1 reads as the opener.
-    const label = kicker;
-    const tw = ctx.measureText(label).width;
-    ctx.fillStyle = accent;
-    const chipH = 52, chipPadX = 22;
-    roundRect(ctx, PAD, headY - 36, tw + chipPadX * 2, chipH, 8);
-    ctx.fill();
-    ctx.fillStyle = theme.chipInk;
-    ctx.fillText(label, PAD + chipPadX, headY);
-  } else {
-    ctx.fillText(kicker, PAD, headY);
-  }
-  setTracking(ctx, "2px");
-  ctx.fillStyle = sub;
-  ctx.font = "500 26px " + MONO;
-  const idx = String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0");
-  ctx.textAlign = "right";
-  ctx.fillText(idx, W - PAD, headY);
-  ctx.textAlign = "left";
-  setTracking(ctx, "0px");
+  // Shared context, then dispatch to the chosen layout template.
+  const v = { W, H, PAD, slide, i, total, kind, isFrame, hasImg, kicker, brand, theme, ink, sub, line, accent };
+  if (template === "broadsheet") drawBroadsheet(ctx, v);
+  else if (template === "index") drawIndexLayout(ctx, v);
+  else if (template === "ledger") drawLedger(ctx, v);
+  else if (template === "feature") drawFeature(ctx, v);
+  else if (template === "quote") drawQuote(ctx, v);
+  else if (template === "frame") drawFrame(ctx, v);
+  else if (template === "split") drawSplit(ctx, v);
+  else if (template === "band") drawBand(ctx, v);
+  else if (template === "corner") drawCorner(ctx, v);
+  else drawEditorial(ctx, v);
+}
 
-  ctx.strokeStyle = line; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(PAD, headY + 34); ctx.lineTo(W - PAD, headY + 34); ctx.stroke();
-
-  // --- Footer region: hairline rule, brand byline, progress segments. --------
-  const ruleY = H - 232;
-  ctx.strokeStyle = line; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(PAD, ruleY); ctx.lineTo(W - PAD, ruleY); ctx.stroke();
-
-  // Brand byline, identical on every slide -> ties the set together and to the post.
-  ctx.fillStyle = ink;
-  ctx.font = "600 30px " + SANS;
-  ctx.fillText(brand.name, PAD, ruleY + 50);
-  ctx.fillStyle = sub;
-  ctx.font = "400 26px " + SANS;
-  ctx.fillText(brand.handle, PAD, ruleY + 88);
-
-  // Right side of byline: monogram dot for cover/close, "SWIPE" cue on cover.
-  if (kind === "cover") {
-    ctx.fillStyle = accent;
-    ctx.font = "500 24px " + MONO;
-    setTracking(ctx, "3px");
-    ctx.textAlign = "right";
-    ctx.fillText("SWIPE →", W - PAD, ruleY + 56);
-    ctx.textAlign = "left";
-    setTracking(ctx, "0px");
-  } else {
-    ctx.fillStyle = accent;
-    ctx.beginPath(); ctx.arc(W - PAD - 6, ruleY + 44, 7, 0, Math.PI * 2); ctx.fill();
-  }
-
-  // Progress: N segments, filled through the current slide. Calm and exact.
-  const segTop = H - 96;
-  const segGap = 9;
+// N progress segments along the bottom, filled through the current slide.
+function drawProgress(ctx, v) {
+  const { W, H, PAD, total, i, accent, line } = v;
+  if (total <= 1) return; // no progress bar for a one-slide carousel
+  const segTop = H - 96, segGap = 9;
   const segW = (W - PAD * 2 - segGap * (total - 1)) / total;
   for (let s = 0; s < total; s++) {
     ctx.fillStyle = s <= i ? accent : line;
     roundRect(ctx, PAD + s * (segW + segGap), segTop, segW, 5, 2.5);
     ctx.fill();
   }
+}
 
-  // --- Main text block, left-aligned, optically centered in the open space. --
-  const headline = slide.title || slide.headline || "";
-  const subText = slide.summary || slide.sub || "";
-  const maxW = W - PAD * 2;
-
-  const hStart = kind === "cover" ? 104 : 88;
-  const hFit = fitText(ctx, headline, maxW,
-    "500 __SIZE__ " + SERIF, hStart, 52, kind === "cover" ? 4 : 3);
-  const hLine = hFit.size * 1.1;
-
-  const subSize = 36;
-  ctx.font = "400 " + subSize + "px " + SANS;
-  const sLines = subText ? wrap(ctx, subText, maxW) : [];
-  const sLine = subSize * 1.4;
-  const gap = sLines.length ? 54 : 0;
-
-  const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
-  const zoneTop = headY + 34;
-  const zoneBot = ruleY;
-  let y = zoneTop + (zoneBot - zoneTop - blockH) / 2 + hFit.size;
-
-  ctx.fillStyle = ink;
-  ctx.font = "500 " + hFit.size + "px " + SERIF;
-  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
-
-  if (sLines.length) {
-    const sy = y + (hFit.lines.length - 1) * hLine + gap;
-    ctx.fillStyle = sub;
-    ctx.font = "400 " + subSize + "px " + SANS;
-    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
+// Shared left-aligned footer: hairline rule, brand byline, and a swipe cue or
+// accent dot. Used by the left-aligned templates.
+function drawFooterLeft(ctx, v, ruleY) {
+  const { W, PAD, brand, ink, sub, line, accent, kind, total } = v;
+  ctx.strokeStyle = line; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(PAD, ruleY); ctx.lineTo(W - PAD, ruleY); ctx.stroke();
+  ctx.textAlign = "left";
+  ctx.fillStyle = ink; ctx.font = "600 30px " + SANS; ctx.fillText(brand.name, PAD, ruleY + 50);
+  ctx.fillStyle = sub; ctx.font = "400 26px " + SANS; ctx.fillText(brand.handle, PAD, ruleY + 88);
+  if (kind === "cover" && total > 1) {
+    ctx.fillStyle = accent; ctx.font = "500 24px " + MONO; setTracking(ctx, "3px");
+    ctx.textAlign = "right"; ctx.fillText("SWIPE →", W - PAD, ruleY + 56); ctx.textAlign = "left"; setTracking(ctx, "0px");
+  } else {
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(W - PAD - 6, ruleY + 44, 7, 0, Math.PI * 2); ctx.fill();
   }
+}
 
-  // Closing slide: quiet disclaimer line just under the headline block.
+// Template 4: Ledger. A vertical accent rail on the left with a top-anchored
+// headline, like a column in a ledger.
+function drawLedger(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, ink, sub, accent } = v;
+  const textX = PAD + 44, maxW = W - textX - PAD;
+  const headY = PAD + 26;
+  ctx.textAlign = "right"; ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, headY);
+  ctx.textAlign = "left"; setTracking(ctx, "0px");
+  const ruleY = H - 232;
+  ctx.strokeStyle = accent; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(PAD, headY + 28); ctx.lineTo(PAD, ruleY - 30); ctx.stroke();
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+
+  const zoneTop = headY + 72;
+  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 92 : 78, 44, 4);
+  const hLine = hFit.size * 1.1;
+  ctx.textAlign = "left"; ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  const y = zoneTop + hFit.size;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, textX, y + k * hLine));
+  const subText = slide.summary || slide.sub || "";
+  if (subText) {
+    const subSize = 34; ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    const sLines = wrap(ctx, subText, maxW).slice(0, 6); const sLine = subSize * 1.4;
+    const sy = y + (hFit.lines.length - 1) * hLine + 56;
+    sLines.forEach((ln, k) => ctx.fillText(ln, textX, sy + k * sLine));
+  }
   if (kind === "close") {
-    ctx.fillStyle = sub;
-    ctx.font = "400 22px " + MONO;
-    setTracking(ctx, "1px");
-    const dy = Math.min(y + blockH + 64, ruleY - 28);
-    ctx.fillText("Educational content, not individualized advice.", PAD, dy);
+    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillText("Educational content, not individualized advice.", textX, ruleY - 30);
     setTracking(ctx, "0px");
   }
+}
+
+// Template 5: Feature. Headline anchored to the bottom of the frame, leaving
+// the top open. Reads like a magazine cover, and sits well over a photo.
+function drawFeature(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, ink, sub } = v;
+  const maxW = W - PAD * 2;
+  const headY = PAD + 26;
+  ctx.textAlign = "left"; ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), PAD, headY);
+  setTracking(ctx, "0px");
+  const ruleY = H - 232;
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+
+  const zoneBottom = ruleY - 40;
+  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 104 : 88, 46, 4);
+  const hLine = hFit.size * 1.1;
+  const subText = slide.summary || slide.sub || "";
+  const subSize = 36; ctx.font = "400 " + subSize + "px " + SANS;
+  const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 6) : []; const sLine = subSize * 1.4; const gap = sLines.length ? 50 : 0;
+  const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
+  const y = zoneBottom - blockH + hFit.size;
+  ctx.textAlign = "left"; ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  if (sLines.length) {
+    const sy = y + (hFit.lines.length - 1) * hLine + gap;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
+  }
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillText("Educational content, not individualized advice.", PAD, headY + 48);
+    setTracking(ctx, "0px");
+  }
+}
+
+// Template 6: Quote. An oversized quotation mark frames the headline as a
+// pull-quote.
+function drawQuote(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, ink, sub, accent } = v;
+  const maxW = W - PAD * 2;
+  const headY = PAD + 26;
+  ctx.textAlign = "right"; ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, headY);
+  ctx.textAlign = "left"; setTracking(ctx, "0px");
+  const ruleY = H - 232;
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+
+  ctx.textAlign = "left"; ctx.fillStyle = accent;
+  ctx.font = "600 230px " + SERIF; ctx.globalAlpha = 0.9;
+  ctx.fillText("“", PAD - 12, PAD + 190); ctx.globalAlpha = 1;
+
+  const zoneTop = PAD + 210, zoneBot = ruleY - 20;
+  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 84 : 72, 44, 4);
+  const hLine = hFit.size * 1.18;
+  const subText = slide.summary || slide.sub || "";
+  const subSize = 32; ctx.font = "400 " + subSize + "px " + SANS;
+  const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 6) : []; const sLine = subSize * 1.4; const gap = sLines.length ? 46 : 0;
+  const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
+  const y = zoneTop + Math.max(0, (zoneBot - zoneTop - blockH) / 2) + hFit.size;
+  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  if (sLines.length) {
+    const sy = y + (hFit.lines.length - 1) * hLine + gap;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
+  }
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillText("Educational content, not individualized advice.", PAD, Math.min(y + blockH + 52, ruleY - 24));
+    setTracking(ctx, "0px");
+  }
+}
+
+// Template 1: Editorial. Kicker + index header rule, left-aligned headline
+// optically centered, brand byline footer.
+function drawEditorial(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, brand, ink, sub, line, accent } = v;
+  const headY = PAD + 26;
+  ctx.textAlign = "right";
+  ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, headY);
+  ctx.textAlign = "left"; setTracking(ctx, "0px");
+  ctx.strokeStyle = line; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(PAD, headY + 34); ctx.lineTo(W - PAD, headY + 34); ctx.stroke();
+
+  const ruleY = H - 232;
+  ctx.strokeStyle = line; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(PAD, ruleY); ctx.lineTo(W - PAD, ruleY); ctx.stroke();
+  ctx.fillStyle = ink; ctx.font = "600 30px " + SANS; ctx.fillText(brand.name, PAD, ruleY + 50);
+  ctx.fillStyle = sub; ctx.font = "400 26px " + SANS; ctx.fillText(brand.handle, PAD, ruleY + 88);
+  if (kind === "cover" && total > 1) {
+    ctx.fillStyle = accent; ctx.font = "500 24px " + MONO; setTracking(ctx, "3px");
+    ctx.textAlign = "right"; ctx.fillText("SWIPE →", W - PAD, ruleY + 56); ctx.textAlign = "left"; setTracking(ctx, "0px");
+  } else {
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(W - PAD - 6, ruleY + 44, 7, 0, Math.PI * 2); ctx.fill();
+  }
+  drawProgress(ctx, v);
+
+  const maxW = W - PAD * 2;
+  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 104 : 88, 46, 4);
+  const hLine = hFit.size * 1.1;
+  const subText = slide.summary || slide.sub || "";
+  const subSize = 36; ctx.font = "400 " + subSize + "px " + SANS;
+  const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 6) : [];
+  const sLine = subSize * 1.4; const gap = sLines.length ? 54 : 0;
+  const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
+  const zoneTop = headY + 34, zoneBot = ruleY;
+  let y = zoneTop + (zoneBot - zoneTop - blockH) / 2 + hFit.size;
+  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  if (sLines.length) {
+    const sy = y + (hFit.lines.length - 1) * hLine + gap;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
+  }
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillText("Educational content, not individualized advice.", PAD, Math.min(y + blockH + 64, ruleY - 28));
+    setTracking(ctx, "0px");
+  }
+}
+
+// Template 2: Broadsheet. A centered newspaper masthead with hairline rules,
+// a centered serif headline, and a centered byline. Wall Street Journal feel.
+function drawBroadsheet(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, brand, ink, sub, line, accent } = v;
+  const cx = W / 2, maxW = W - PAD * 2;
+  ctx.textAlign = "center";
+
+  const topY = PAD + 20;
+  ctx.strokeStyle = line; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(PAD, topY); ctx.lineTo(W - PAD, topY);
+  ctx.moveTo(PAD, topY + 6); ctx.lineTo(W - PAD, topY + 6); ctx.stroke();
+  const drY = topY + 6;
+  ctx.fillStyle = sub; ctx.font = "400 23px " + MONO; setTracking(ctx, "3px");
+  ctx.fillText("NO. " + String(i + 1).padStart(2, "0") + " OF " + String(total).padStart(2, "0"), cx, drY + 44);
+  setTracking(ctx, "0px");
+
+  const ruleY = H - 232;
+  ctx.strokeStyle = line; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx - 64, ruleY); ctx.lineTo(cx + 64, ruleY); ctx.stroke();
+  ctx.fillStyle = ink; ctx.font = "600 30px " + SANS; ctx.fillText(brand.name, cx, ruleY + 52);
+  ctx.fillStyle = sub; ctx.font = "400 26px " + SANS; ctx.fillText(brand.handle, cx, ruleY + 90);
+  drawProgress(ctx, v);
+
+  const zoneTop = drY + 92, zoneBot = ruleY - 28;
+  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 96 : 82, 44, 4);
+  const hLine = hFit.size * 1.16;
+  const subText = slide.summary || slide.sub || "";
+  const subSize = 32; ctx.font = "400 " + subSize + "px " + SANS;
+  const sLines = subText ? wrap(ctx, subText, maxW - 60).slice(0, 6) : [];
+  const sLine = subSize * 1.4; const gap = sLines.length ? 44 : 0;
+  const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
+  let y = zoneTop + (zoneBot - zoneTop - blockH) / 2 + hFit.size;
+  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, cx, y + k * hLine));
+  if (sLines.length) {
+    const sy = y + (hFit.lines.length - 1) * hLine + gap;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    sLines.forEach((ln, k) => ctx.fillText(ln, cx, sy + k * sLine));
+  }
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillText("Educational content, not individualized advice.", cx, Math.min(y + blockH + 54, ruleY - 26));
+    setTracking(ctx, "0px");
+  }
+  ctx.textAlign = "left";
+}
+
+// Template 3: Index. An oversized slide numeral anchors the composition, with
+// the headline set beneath it. Minimal and modern.
+function drawIndexLayout(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, brand, ink, sub, line, accent, hasImg } = v;
+  const maxW = W - PAD * 2;
+  ctx.textAlign = "left";
+
+  const headY = PAD + 30;
+  ctx.fillStyle = sub; ctx.font = "500 28px " + MONO; setTracking(ctx, "2px");
+  ctx.textAlign = "right"; ctx.fillText("/ " + String(total).padStart(2, "0"), W - PAD, headY); ctx.textAlign = "left"; setTracking(ctx, "0px");
+
+  // Oversized numeral. Filled on the cover, outlined elsewhere, for rhythm.
+  const num = String(i + 1).padStart(2, "0");
+  const numSize = 300;
+  ctx.font = "500 " + numSize + "px " + SERIF;
+  const numY = PAD + 100 + numSize * 0.74;
+  ctx.lineWidth = 3; ctx.strokeStyle = accent; ctx.fillStyle = accent;
+  if (kind === "cover") { ctx.globalAlpha = 0.95; ctx.fillText(num, PAD - 6, numY); }
+  else { ctx.globalAlpha = hasImg ? 0.92 : 0.85; ctx.strokeText(num, PAD - 4, numY); }
+  ctx.globalAlpha = 1;
+
+  const ruleY = H - 232;
+  ctx.strokeStyle = line; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(PAD, ruleY); ctx.lineTo(W - PAD, ruleY); ctx.stroke();
+  ctx.fillStyle = ink; ctx.font = "600 30px " + SANS; ctx.fillText(brand.name, PAD, ruleY + 50);
+  ctx.fillStyle = sub; ctx.font = "400 26px " + SANS; ctx.fillText(brand.handle, PAD, ruleY + 88);
+  if (kind === "cover" && total > 1) {
+    ctx.fillStyle = accent; ctx.font = "500 24px " + MONO; setTracking(ctx, "3px");
+    ctx.textAlign = "right"; ctx.fillText("SWIPE →", W - PAD, ruleY + 56); ctx.textAlign = "left"; setTracking(ctx, "0px");
+  } else {
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(W - PAD - 6, ruleY + 44, 7, 0, Math.PI * 2); ctx.fill();
+  }
+  drawProgress(ctx, v);
+
+  const zoneTop = numY + 36, zoneBot = ruleY - 24;
+  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 90 : 78, 44, 4);
+  const hLine = hFit.size * 1.1;
+  const subText = slide.summary || slide.sub || "";
+  const subSize = 34; ctx.font = "400 " + subSize + "px " + SANS;
+  const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 5) : [];
+  const sLine = subSize * 1.4; const gap = sLines.length ? 44 : 0;
+  const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
+  let y = zoneTop + Math.max(0, (zoneBot - zoneTop - blockH) / 2) + hFit.size;
+  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  if (sLines.length) {
+    const sy = y + (hFit.lines.length - 1) * hLine + gap;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
+  }
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillText("Educational content, not individualized advice.", PAD, Math.min(y + blockH + 52, ruleY - 24));
+    setTracking(ctx, "0px");
+  }
+}
+
+// "#RRGGBB" + alpha -> "rgba(r,g,b,a)". Used to tint the photo scrim with the
+// active theme so each theme keeps its own mood even behind a photo.
+function hexToRgba(hex, a) {
+  const h = String(hex || "#000000").replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16) || 0;
+  const g = parseInt(h.slice(2, 4), 16) || 0;
+  const b = parseInt(h.slice(4, 6), 16) || 0;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// Draw an image to fully cover w x h (like CSS background-size: cover).
+function drawCover(ctx, img, w, h) {
+  const ir = img.width / img.height;
+  const r = w / h;
+  let dw, dh, dx, dy;
+  if (ir > r) { dh = h; dw = h * ir; dx = (w - dw) / 2; dy = 0; }
+  else { dw = w; dh = w / ir; dx = 0; dy = (h - dh) / 2; }
+  ctx.drawImage(img, dx, dy, dw, dh);
+}
+
+// Template 7: Frame. A thin inset border like a gallery placard, everything
+// centered inside it.
+function drawFrame(ctx, v) {
+  const { W, H, slide, i, total, kind, ink, sub, line, accent } = v;
+  const ruleY = H - 232;
+  const fx = 64, fy = 64, fw = W - 128, fb = ruleY - 30;
+  ctx.strokeStyle = accent; ctx.lineWidth = 3;
+  ctx.strokeRect(fx, fy, fw, fb - fy);
+  ctx.strokeStyle = line; ctx.lineWidth = 1;
+  ctx.strokeRect(fx + 14, fy + 14, fw - 28, fb - fy - 28);
+  ctx.textAlign = "center";
+  ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "4px");
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W / 2, fy + 84);
+  setTracking(ctx, "0px");
+  const maxW = fw - 160;
+  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 92 : 78, 44, 4);
+  const hLine = hFit.size * 1.16;
+  const subText = slide.summary || slide.sub || "";
+  const subSize = 32; ctx.font = "400 " + subSize + "px " + SANS;
+  const sLines = subText ? wrap(ctx, subText, maxW).slice(0, 6) : [];
+  const sLine = subSize * 1.4; const gap = sLines.length ? 46 : 0;
+  const blockH = hFit.lines.length * hLine + gap + sLines.length * sLine;
+  const zoneTop = fy + 120, zoneBot = fb - 60;
+  const y = zoneTop + Math.max(0, (zoneBot - zoneTop - blockH) / 2) + hFit.size;
+  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, W / 2, y + k * hLine));
+  if (sLines.length) {
+    const sy = y + (hFit.lines.length - 1) * hLine + gap;
+    ctx.fillStyle = sub; ctx.font = "400 " + subSize + "px " + SANS;
+    sLines.forEach((ln, k) => ctx.fillText(ln, W / 2, sy + k * sLine));
+  }
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 20px " + MONO;
+    ctx.fillText("Educational content, not individualized advice.", W / 2, fb - 40);
+  }
+  ctx.textAlign = "left";
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+}
+
+// Template 8: Split. A bold accent panel carries the headline; supporting
+// text sits below on the page color.
+function drawSplit(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, theme, ink, sub, hasImg, accent } = v;
+  const ruleY = H - 232;
+  const panelH = Math.round(H * 0.44);
+  ctx.save();
+  ctx.globalAlpha = hasImg ? 0.92 : 1;
+  ctx.fillStyle = accent;
+  ctx.fillRect(0, 0, W, panelH);
+  ctx.restore();
+  ctx.fillStyle = theme.chipInk; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), PAD, 100);
+  setTracking(ctx, "0px");
+  const maxW = W - PAD * 2;
+  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 94 : 80, 44, 4);
+  const hLine = hFit.size * 1.08;
+  const blockH = hFit.lines.length * hLine;
+  const y = 150 + Math.max(0, (panelH - 190 - blockH) / 2) + hFit.size;
+  ctx.fillStyle = theme.chipInk; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  const subText = slide.summary || slide.sub || "";
+  if (subText) {
+    const subSize = 36; ctx.font = "400 " + subSize + "px " + SANS;
+    const sLines = wrap(ctx, subText, maxW).slice(0, 6);
+    const sLine = subSize * 1.45;
+    ctx.fillStyle = ink;
+    const sy = panelH + 120;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
+  }
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO; setTracking(ctx, "1px");
+    ctx.fillText("Educational content, not individualized advice.", PAD, ruleY - 34);
+    setTracking(ctx, "0px");
+  }
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+}
+
+// Template 9: Band. The headline is knocked out of a full-width accent band.
+function drawBand(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, theme, sub, accent } = v;
+  const ruleY = H - 232;
+  ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.textAlign = "right";
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, PAD + 26);
+  ctx.textAlign = "left"; setTracking(ctx, "0px");
+  const maxW = W - PAD * 2;
+  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 88 : 76, 44, 4);
+  const hLine = hFit.size * 1.14;
+  const bandPadY = 58;
+  const bandH = hFit.lines.length * hLine + bandPadY * 2 - (hLine - hFit.size);
+  const bandTop = Math.round(H * 0.3);
+  ctx.fillStyle = accent;
+  ctx.fillRect(0, bandTop, W, bandH);
+  ctx.fillStyle = theme.chipInk;
+  ctx.font = "500 " + hFit.size + "px " + SERIF;
+  const y = bandTop + bandPadY + hFit.size - 12;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  const subText = slide.summary || slide.sub || "";
+  if (subText) {
+    const subSize = 34; ctx.font = "400 " + subSize + "px " + SANS;
+    const sLines = wrap(ctx, subText, maxW).slice(0, 5);
+    const sLine = subSize * 1.42;
+    ctx.fillStyle = sub;
+    const sy = bandTop + bandH + 74;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
+  }
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO;
+    ctx.fillText("Educational content, not individualized advice.", PAD, ruleY - 34);
+  }
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
+}
+
+// Template 10: Corner. Headline anchored high, an oversized numeral tucked
+// into the lower right corner.
+function drawCorner(ctx, v) {
+  const { W, H, PAD, slide, i, total, kind, ink, sub, accent } = v;
+  const ruleY = H - 232;
+  ctx.fillStyle = sub; ctx.font = "500 26px " + MONO; setTracking(ctx, "2px");
+  ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), PAD, PAD + 26);
+  setTracking(ctx, "0px");
+  const maxW = W - PAD * 2;
+  const hFit = fitText(ctx, slide.title || slide.headline || "", maxW, "500 __SIZE__ " + SERIF, kind === "cover" ? 96 : 82, 46, 4);
+  const hLine = hFit.size * 1.12;
+  const y = PAD + 140 + hFit.size;
+  ctx.fillStyle = ink; ctx.font = "500 " + hFit.size + "px " + SERIF;
+  hFit.lines.forEach((ln, k) => ctx.fillText(ln, PAD, y + k * hLine));
+  const subText = slide.summary || slide.sub || "";
+  if (subText) {
+    const subSize = 34; ctx.font = "400 " + subSize + "px " + SANS;
+    const sLines = wrap(ctx, subText, maxW).slice(0, 5);
+    const sLine = subSize * 1.42;
+    ctx.fillStyle = sub;
+    const sy = y + (hFit.lines.length - 1) * hLine + 64;
+    sLines.forEach((ln, k) => ctx.fillText(ln, PAD, sy + k * sLine));
+  }
+  const num = String(i + 1).padStart(2, "0");
+  ctx.font = "500 260px " + SERIF;
+  ctx.textAlign = "right";
+  ctx.lineWidth = 3; ctx.strokeStyle = accent;
+  if (kind === "cover") { ctx.fillStyle = accent; ctx.globalAlpha = 0.92; ctx.fillText(num, W - PAD + 6, ruleY - 44); }
+  else { ctx.globalAlpha = 0.8; ctx.strokeText(num, W - PAD + 6, ruleY - 44); }
+  ctx.globalAlpha = 1; ctx.textAlign = "left";
+  if (kind === "close") {
+    ctx.fillStyle = sub; ctx.font = "400 22px " + MONO;
+    ctx.fillText("Educational content, not individualized advice.", PAD, ruleY - 34);
+  }
+  drawFooterLeft(ctx, v, ruleY);
+  drawProgress(ctx, v);
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -397,21 +890,267 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 function downloadCanvas(canvas, name) {
+  // JPEG at high quality: the user's compliance system only accepts JPG/JPEG.
   canvas.toBlob((b) => {
     const u = URL.createObjectURL(b);
     const a = document.createElement("a");
     a.href = u; a.download = name; a.click();
     setTimeout(() => URL.revokeObjectURL(u), 1000);
-  }, "image/png");
+  }, "image/jpeg", 0.95);
+}
+
+function downloadBlob(blob, name) {
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = u; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(u), 1500);
+}
+
+// Read a fetched image Blob into a data URL, so drawing it never taints the
+// canvas and the slide can still be exported to PNG.
+function blobToDataUrl(blob) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.onerror = rej;
+    fr.readAsDataURL(blob);
+  });
+}
+
+// Decode the base64 payload of a data URL into raw bytes.
+function dataUrlBytes(dataUrl) {
+  const bin = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+
+// Re-encode any image data URL as JPEG at the given quality, optionally
+// capping the long side (webhook payloads must stay under ~5MB or the whole
+// send is rejected). Downloads and the PDF stay full quality.
+function toJpegDataUrl(dataUrl, q, maxSide) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => {
+      let w = im.naturalWidth, h = im.naturalHeight;
+      const long = Math.max(w, h);
+      if (maxSide && long > maxSide) {
+        const k = maxSide / long;
+        w = Math.round(w * k); h = Math.round(h * k);
+      }
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      const x = c.getContext("2d");
+      x.imageSmoothingQuality = "high";
+      x.fillStyle = "#ffffff"; x.fillRect(0, 0, w, h);
+      x.drawImage(im, 0, 0, w, h);
+      res(c.toDataURL("image/jpeg", q));
+    };
+    im.onerror = rej;
+    im.src = dataUrl;
+  });
+}
+
+// LinkedIn's post commentary uses "little text format" where these characters
+// are control characters; unescaped they can make the API reject the post.
+function escapeLTF(s) {
+  return String(s || "").replace(/[\\|{}@\[\]()<>*_~]/g, (c) => "\\" + c);
+}
+
+// Push one planned post to the user's automation webhook as clean form fields.
+// Images travel as {"list":[base64...]} JPEG capped at 1440px, so five photos
+// stay safely under webhook size limits (platforms serve ~1080px anyway).
+async function sendItemToWebhook(item, webhookUrl, includeImages, liToken) {
+  const params = new URLSearchParams();
+  params.set("caption", item.caption || "");
+  params.set("platforms", (item.platforms || []).join(","));
+  params.set("date", item.date || "");
+  params.set("time", item.time || "");
+  const list = [];
+  const rawList = [];
+  if (includeImages) {
+    for (const d of (item.images || [])) {
+      const j = await toJpegDataUrl(d, 0.87, 1440);
+      const b64 = j.slice(j.indexOf(",") + 1);
+      rawList.push(b64);
+      // Pre-percent-encode the base64 so the automation can drop it straight
+      // into a form body (image={{value}}) with no encoding function. Make's
+      // encodeURL leaves "+" bare, which servers decode as a space and corrupt
+      // the image, so we don't trust any downstream encoder.
+      list.push(encodeURIComponent(b64));
+    }
+  }
+  params.set("images", JSON.stringify({ list }));
+  // For LinkedIn document carousels: the same slides bundled as a PDF, so an
+  // automation with LinkedIn API access can post it without any manual step.
+  if (rawList.length && (item.platforms || []).includes("linkedin")) {
+    const pdfDataUrl = await blobToDataUrl(makePdf(rawList.map((b) => "data:image/jpeg;base64," + b)));
+    params.set("pdf", pdfDataUrl.slice(pdfDataUrl.indexOf(",") + 1));
+    // With a LinkedIn API token, the automation can publish the PDF as a real
+    // document carousel. The app builds the whole Posts API body here (JSON
+    // and commentary escaping included) so the automation only fills in two
+    // placeholders: __SUB__ (member id) and __DOCURN__ (uploaded document).
+    if ((liToken || "").trim()) {
+      params.set("li_token", liToken.trim());
+      const title = escapeLTF((item.caption || "Carousel").split("\n")[0].slice(0, 60)) || "Carousel";
+      params.set("li_post_body", JSON.stringify({
+        author: "urn:li:person:__SUB__",
+        commentary: escapeLTF(item.caption || ""),
+        visibility: "PUBLIC",
+        distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] },
+        content: { media: { title: title, id: "__DOCURN__" } },
+        lifecycleState: "PUBLISHED",
+        isReshareDisabledByAuthor: false,
+      }));
+    }
+  }
+  await fetch(webhookUrl, {
+    method: "POST", mode: "no-cors",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
+  });
+}
+
+// Keep uploaded photos at the best quality that still posts well: originals
+// are kept as-is up to 2160px on the long side, larger ones are downscaled
+// with high-quality resampling (platforms max out well below that anyway).
+function normalizeUpload(dataUrl) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => {
+      const maxSide = 2160;
+      const long = Math.max(im.naturalWidth, im.naturalHeight);
+      if (long <= maxSide) return res(dataUrl);
+      const k = maxSide / long;
+      const c = document.createElement("canvas");
+      c.width = Math.round(im.naturalWidth * k);
+      c.height = Math.round(im.naturalHeight * k);
+      const x = c.getContext("2d");
+      x.imageSmoothingQuality = "high";
+      x.fillStyle = "#ffffff"; x.fillRect(0, 0, c.width, c.height);
+      x.drawImage(im, 0, 0, c.width, c.height);
+      res(c.toDataURL("image/jpeg", 0.95));
+    };
+    im.onerror = rej;
+    im.src = dataUrl;
+  });
+}
+
+// Read pixel dimensions straight from JPEG bytes (the SOF marker), so each
+// PDF page can match its image's true aspect ratio.
+function jpegDims(bytes) {
+  let i = 2;
+  while (i < bytes.length - 9) {
+    if (bytes[i] !== 0xFF) { i++; continue; }
+    const t = bytes[i + 1];
+    if (t >= 0xC0 && t <= 0xCF && t !== 0xC4 && t !== 0xC8 && t !== 0xCC) {
+      return { h: (bytes[i + 5] << 8) | bytes[i + 6], w: (bytes[i + 7] << 8) | bytes[i + 8] };
+    }
+    i += 2 + ((bytes[i + 2] << 8) | bytes[i + 3]);
+  }
+  return { w: 1080, h: 1350 };
+}
+
+// Minimal dependency-free PDF: one JPEG per page (DCTDecode passthrough),
+// each page sized to its own image so nothing is stretched. This is how a
+// LinkedIn "document" carousel is made from the slides.
+function makePdf(jpegDataUrls) {
+  const enc = new TextEncoder();
+  const parts = [];
+  let offset = 0;
+  const offsets = [];
+  const push = (x) => { const b = typeof x === "string" ? enc.encode(x) : x; parts.push(b); offset += b.length; };
+  push("%PDF-1.4\n");
+  const n = jpegDataUrls.length;
+  const total = 2 + n * 3;
+  const kids = Array.from({ length: n }, (_, i) => (3 + 3 * i) + " 0 R").join(" ");
+  offsets.push(offset); push("1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n");
+  offsets.push(offset); push("2 0 obj\n<</Type/Pages/Kids[" + kids + "]/Count " + n + ">>\nendobj\n");
+  for (let i = 0; i < n; i++) {
+    const jb = dataUrlBytes(jpegDataUrls[i]);
+    const d = jpegDims(jb);
+    const W = Math.max(1, Math.round(d.w / 2)), H = Math.max(1, Math.round(d.h / 2)); // points
+    const pageN = 3 + 3 * i, contN = 4 + 3 * i, imgN = 5 + 3 * i;
+    offsets.push(offset);
+    push(pageN + " 0 obj\n<</Type/Page/Parent 2 0 R/MediaBox[0 0 " + W + " " + H + "]/Resources<</XObject<</Im" + i + " " + imgN + " 0 R>>>>/Contents " + contN + " 0 R>>\nendobj\n");
+    const cs = "q " + W + " 0 0 " + H + " 0 0 cm /Im" + i + " Do Q";
+    offsets.push(offset);
+    push(contN + " 0 obj\n<</Length " + cs.length + ">>\nstream\n" + cs + "\nendstream\nendobj\n");
+    offsets.push(offset);
+    push(imgN + " 0 obj\n<</Type/XObject/Subtype/Image/Width " + d.w + "/Height " + d.h + "/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length " + jb.length + ">>\nstream\n");
+    push(jb);
+    push("\nendstream\nendobj\n");
+  }
+  const xrefStart = offset;
+  let xref = "xref\n0 " + (total + 1) + "\n0000000000 65535 f \n";
+  for (const o of offsets) xref += String(o).padStart(10, "0") + " 00000 n \n";
+  push(xref);
+  push("trailer\n<</Size " + (total + 1) + "/Root 1 0 R>>\nstartxref\n" + xrefStart + "\n%%EOF");
+  return new Blob(parts, { type: "application/pdf" });
+}
+
+// --- Minimal, dependency-free ZIP (store method) -----------------------------
+// PNGs are already compressed, so storing them uncompressed is fine and keeps
+// this a single self-contained file with no extra library.
+function crc32(bytes) {
+  let table = crc32.table;
+  if (!table) {
+    table = crc32.table = [];
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      table[n] = c >>> 0;
+    }
+  }
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ table[(crc ^ bytes[i]) & 0xFF];
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function concatBytes(arrs) {
+  let len = 0; for (const a of arrs) len += a.length;
+  const out = new Uint8Array(len); let o = 0;
+  for (const a of arrs) { out.set(a, o); o += a.length; }
+  return out;
+}
+
+function makeZip(files) {
+  const enc = new TextEncoder();
+  const u16 = (n) => new Uint8Array([n & 255, (n >> 8) & 255]);
+  const u32 = (n) => new Uint8Array([n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255]);
+  const locals = [], centrals = [];
+  let offset = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name);
+    const crc = crc32(f.data), size = f.data.length;
+    const local = concatBytes([
+      u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(crc), u32(size), u32(size), u16(name.length), u16(0), name, f.data,
+    ]);
+    locals.push(local);
+    centrals.push(concatBytes([
+      u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(crc), u32(size), u32(size), u16(name.length), u16(0), u16(0), u16(0), u16(0),
+      u32(0), u32(offset), name,
+    ]));
+    offset += local.length;
+  }
+  const centralStart = offset;
+  let centralSize = 0; for (const c of centrals) centralSize += c.length;
+  const eocd = concatBytes([
+    u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length),
+    u32(centralSize), u32(centralStart), u16(0),
+  ]);
+  return new Blob([...locals, ...centrals, eocd], { type: "application/zip" });
 }
 
 // Small live thumbnail of a slide. Renders the real drawSlide so the strip is
 // an exact preview, and clicking it jumps to that slide in the carousel tab.
-function SlideThumb({ slide, i, total, opts, ready, active, onClick, overlayImg }) {
+function SlideThumb({ slide, i, total, opts, img, ready, active, onClick }) {
   const ref = useRef(null);
   useEffect(() => {
-    if (ref.current) drawSlide(ref.current, slide, i, total, opts, overlayImg);
-  }, [slide, i, total, opts, ready, overlayImg]);
+    if (ref.current) drawSlide(ref.current, slide, i, total, opts, img);
+  }, [slide, i, total, opts, img, ready]);
   return (
     <button className={"thumb" + (active ? " on" : "")} onClick={onClick} title={"Slide " + (i + 1)}>
       <canvas ref={ref} />
@@ -419,15 +1158,479 @@ function SlideThumb({ slide, i, total, opts, ready, active, onClick, overlayImg 
   );
 }
 
+// ---- Planner ----------------------------------------------------------------
+const PLATFORMS = [
+  { id: "linkedin", label: "LinkedIn", ayr: "linkedin" },
+  { id: "x", label: "X", ayr: "twitter" },
+  { id: "instagram", label: "Instagram", ayr: "instagram" },
+  { id: "threads", label: "Threads", ayr: "threads" },
+  { id: "facebook", label: "Facebook", ayr: "facebook" },
+];
+const AYR_POST = "https://api.ayrshare.com/api/post";
+const AYR_UPLOAD = "https://api.ayrshare.com/api/media/upload";
+
+// What each platform actually accepts. chars is a hard API/UI limit; tags is a
+// hard limit where one exists (Instagram); maxImages is per post (X 4, IG
+// carousel 10 via API, LinkedIn multi-image 9); minImages because Instagram
+// cannot post bare text through the API.
+const PLATFORM_RULES = {
+  linkedin: { name: "LinkedIn", chars: 3000, tags: Infinity, maxImages: 9, minImages: 0 },
+  x: { name: "X", chars: 280, tags: Infinity, maxImages: 4, minImages: 0 },
+  instagram: { name: "Instagram", chars: 2200, tags: 30, maxImages: 10, minImages: 1 },
+  threads: { name: "Threads", chars: 500, tags: Infinity, maxImages: 20, minImages: 0 },
+  facebook: { name: "Facebook", chars: 63206, tags: Infinity, maxImages: 10, minImages: 0 },
+};
+
+function postStats(item) {
+  const cap = item.caption || "";
+  return {
+    chars: cap.length,
+    tags: (cap.match(/#[\p{L}\d_]+/gu) || []).length,
+    images: (item.images || []).length,
+  };
+}
+
+// Violations for one platform. Empty array = good to post there.
+function checkPlatform(item, id) {
+  const r = PLATFORM_RULES[id];
+  if (!r) return [];
+  const s = postStats(item);
+  const out = [];
+  if (s.chars > r.chars) out.push(s.chars + "/" + r.chars + " characters");
+  if (s.tags > r.tags) out.push(s.tags + "/" + r.tags + " hashtags");
+  if (s.images > r.maxImages) out.push(s.images + " images (max " + r.maxImages + ")");
+  if (s.images < r.minImages) out.push("needs at least " + r.minImages + " image");
+  return out;
+}
+
+function checkViolations(item) {
+  const out = [];
+  for (const id of item.platforms || []) {
+    for (const v of checkPlatform(item, id)) out.push((PLATFORM_RULES[id] || {}).name + ": " + v);
+  }
+  return out;
+}
+
+// Where a platform's composer opens, prefilled where the platform allows it.
+function composerUrl(platformId, caption) {
+  const t = encodeURIComponent(caption || "");
+  if (platformId === "x") return "https://twitter.com/intent/tweet?text=" + t;
+  if (platformId === "threads") return "https://www.threads.net/intent/post?text=" + t;
+  if (platformId === "linkedin") return "https://www.linkedin.com/feed/?shareActive=true";
+  if (platformId === "facebook") return "https://www.facebook.com/";
+  if (platformId === "instagram") return "https://www.instagram.com/";
+  return "";
+}
+
+// Tiny IndexedDB key/value store (holds the whole plan, including slide images,
+// which would overflow localStorage). No dependency, stays in the single file.
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open("thedesk", 1);
+    req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains("kv")) req.result.createObjectStore("kv"); };
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const t = db.transaction("kv", "readonly").objectStore("kv").get(key);
+    t.onsuccess = () => res(t.result);
+    t.onerror = () => rej(t.error);
+  });
+}
+async function idbSet(key, val) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction("kv", "readwrite");
+    tx.objectStore("kv").put(val, key);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+function copyText(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text; document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); } catch (e) {}
+  document.body.removeChild(ta);
+}
+
+const BLANK_POST = () => ({
+  id: "p" + Date.now() + Math.random().toString(36).slice(2, 6),
+  caption: "", platforms: ["linkedin"], date: new Date().toISOString().slice(0, 10),
+  time: "09:00", status: "draft", images: [],
+});
+
+function Planner({ ayrKey, setAyrKey, webhookUrl, setWebhookUrl, webhookImages, setWebhookImages, liToken, setLiToken, onBack }) {
+  const [items, setItems] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const [status, setStatus] = useState("");
+  const fileRef = useRef(null);
+  const imgRef = useRef(null);
+  const overrideRef = useRef(null); // post id allowed to bypass criteria warnings once
+
+  // Read chosen photo files and attach them to the post being edited.
+  function addImages(files) {
+    for (const f of Array.from(files || [])) {
+      const fr = new FileReader();
+      fr.onload = async () => {
+        try {
+          const img = await normalizeUpload(fr.result);
+          setEditing((ed) => (ed ? { ...ed, images: [...(ed.images || []), img] } : ed));
+        } catch (e) { setStatus("Could not read one of the images."); }
+      };
+      fr.readAsDataURL(f);
+    }
+  }
+
+  useEffect(() => {
+    let dead = false;
+    idbGet("plan").then((p) => { if (!dead) { setItems(Array.isArray(p) ? p : []); setLoaded(true); } })
+      .catch(() => { if (!dead) setLoaded(true); });
+    // Refresh when the background scheduler auto-sends something.
+    const reload = () => idbGet("plan").then((p) => { if (!dead) setItems(Array.isArray(p) ? p : []); }).catch(() => {});
+    window.addEventListener("plan-updated", reload);
+    return () => { dead = true; window.removeEventListener("plan-updated", reload); };
+  }, []);
+
+  function persist(next) { setItems(next); idbSet("plan", next).catch(() => setStatus("Could not save locally.")); }
+  function upsert(item) {
+    const exists = items.some((x) => x.id === item.id);
+    persist(exists ? items.map((x) => (x.id === item.id ? item : x)) : [...items, item]);
+    setEditing(null);
+  }
+  function remove(id) { persist(items.filter((x) => x.id !== id)); setEditing(null); }
+
+  function exportPlan() {
+    const blob = new Blob([JSON.stringify({ version: 1, items }, null, 2)], { type: "application/json" });
+    downloadBlob(blob, "the-desk-plan.json");
+  }
+  function importPlan(file) {
+    const fr = new FileReader();
+    fr.onload = () => {
+      try {
+        const data = JSON.parse(fr.result);
+        const incoming = Array.isArray(data) ? data : (data.items || []);
+        const byId = {}; [...items, ...incoming].forEach((x) => { if (x && x.id) byId[x.id] = x; });
+        persist(Object.values(byId));
+        setStatus("Imported " + incoming.length + " posts.");
+      } catch (e) { setStatus("That file could not be read."); }
+    };
+    fr.readAsText(file);
+  }
+
+  // Assisted post: copy caption, download images as JPG, open the composer.
+  async function assist(item, platformId) {
+    copyText(item.caption || "");
+    const imgs = item.images || [];
+    for (let k = 0; k < imgs.length; k++) {
+      const j = await toJpegDataUrl(imgs[k], 0.95);
+      const a = document.createElement("a");
+      a.href = j; a.download = "post-" + item.id + "-slide-" + (k + 1) + ".jpg"; a.click();
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    const url = composerUrl(platformId, item.caption || "");
+    if (url) window.open(url, "_blank", "noopener");
+    setStatus("Caption copied and images downloaded. Paste into " + (PLATFORMS.find((p) => p.id === platformId) || {}).label + ", then attach the images.");
+  }
+
+  async function autoPost(item) {
+    const key = (ayrKey || "").trim();
+    if (!key) { setStatus("Add your Ayrshare API key below to auto-post."); return; }
+    if (!item.platforms || !item.platforms.length) { setStatus("Pick at least one platform first."); return; }
+    setStatus("Posting via Ayrshare...");
+    try {
+      const mediaUrls = [];
+      for (const d of (item.images || [])) {
+        const up = await fetch(AYR_UPLOAD, {
+          method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+          body: JSON.stringify({ file: d, fileName: "slide.png" }),
+        });
+        const ud = await up.json().catch(() => ({}));
+        if (!up.ok || ud.status === "error") throw new Error(ud.message || ("image upload failed (" + up.status + ")"));
+        if (ud.url) mediaUrls.push(ud.url);
+      }
+      const platforms = item.platforms.map((id) => (PLATFORMS.find((p) => p.id === id) || {}).ayr).filter(Boolean);
+      const body = { post: item.caption, platforms };
+      if (mediaUrls.length) body.mediaUrls = mediaUrls;
+      const r = await fetch(AYR_POST, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.status === "error") throw new Error(d.message || ("Ayrshare error " + r.status));
+      persist(items.map((x) => (x.id === item.id ? { ...x, status: "posted" } : x)));
+      setStatus("Posted to " + platforms.join(", ") + ".");
+    } catch (e) {
+      setStatus("Auto-post failed: " + (e && e.message ? e.message : e));
+    }
+  }
+
+  // Free path: push the post to the user's own automation (Make, n8n, Zapier,
+  // self-hosted Postiz). Fire-and-forget so cross-origin webhooks still receive
+  // it; the automation does the actual posting for free.
+  async function postWebhook(item) {
+    const url = (webhookUrl || "").trim();
+    if (!url) { setStatus("Add a free automation webhook URL below (Make, n8n, Zapier, or self-hosted Postiz)."); return; }
+    // Enforce each selected platform's criteria before sending. One more click
+    // on the same post overrides, in case the user disagrees.
+    const viol = checkViolations(item);
+    if (viol.length && overrideRef.current !== item.id) {
+      overrideRef.current = item.id;
+      setStatus("Fix before posting: " + viol.join(" · ") + ". Or click Send again to post anyway.");
+      return;
+    }
+    overrideRef.current = null;
+    setStatus("Sending to your automation...");
+    try {
+      await sendItemToWebhook(item, url, webhookImages, liToken);
+      persist(items.map((x) => (x.id === item.id ? { ...x, status: "posted" } : x)));
+      setStatus("Sent to your automation. Check it (Make/n8n/etc.) to confirm the post went out.");
+    } catch (e) {
+      setStatus("Could not reach the webhook: " + (e && e.message ? e.message : e));
+    }
+  }
+
+  // One zip with everything compliance needs: the caption as a text file and
+  // every slide as a high-quality JPG (their system only accepts JPG/JPEG).
+  async function compliancePack(item) {
+    const files = [{ name: "caption.txt", data: new TextEncoder().encode(item.caption || "") }];
+    const imgs = item.images || [];
+    for (let k = 0; k < imgs.length; k++) {
+      const j = await toJpegDataUrl(imgs[k], 0.95);
+      files.push({ name: "slide-" + String(k + 1).padStart(2, "0") + ".jpg", data: dataUrlBytes(j) });
+    }
+    downloadBlob(makeZip(files), "compliance-" + (item.date || "post") + ".zip");
+    setStatus("Compliance pack downloaded: caption.txt + " + imgs.length + " JPG image(s).");
+  }
+
+  // Bundle this post's slides into a PDF, which is how LinkedIn does carousels
+  // (upload it as a document post).
+  async function itemPdf(item) {
+    const imgs = item.images || [];
+    if (!imgs.length) { setStatus("This post has no slides to turn into a PDF."); return; }
+    const urls = [];
+    for (const d of imgs) urls.push(await toJpegDataUrl(d, 0.95));
+    downloadBlob(makePdf(urls), "linkedin-carousel.pdf");
+    setStatus("PDF downloaded. On LinkedIn: start a post, click the document icon, and upload it.");
+  }
+
+  const upcoming = [...items].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  const y = month.getFullYear(), m = month.getMonth();
+  const first = new Date(y, m, 1).getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < first; i++) cells.push(null);
+  for (let d = 1; d <= days; d++) cells.push(d);
+  const monthName = month.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const iso = (d) => y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+
+  return (
+    <div className="planner">
+      <div className="plan-bar">
+        <div className="plan-actions">
+          <button className="act" onClick={() => setEditing(BLANK_POST())}>New post</button>
+          <button className="act ghost" onClick={exportPlan}>Export</button>
+          <button className="act ghost" onClick={() => fileRef.current && fileRef.current.click()}>Import</button>
+          <input ref={fileRef} type="file" accept="application/json" style={{ display: "none" }}
+            onChange={(e) => { if (e.target.files[0]) importPlan(e.target.files[0]); e.target.value = ""; }} />
+        </div>
+        {status && <div className="plan-status">{status}</div>}
+      </div>
+
+      <div className="cal">
+        <div className="cal-head">
+          <button className="nav" onClick={() => setMonth(new Date(y, m - 1, 1))}>‹</button>
+          <span className="cal-title">{monthName}</span>
+          <button className="nav" onClick={() => setMonth(new Date(y, m + 1, 1))}>›</button>
+        </div>
+        <div className="cal-dow-row">
+          {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (<div key={"h" + i} className="cal-dow">{d}</div>))}
+        </div>
+        <div className="cal-grid">
+          {cells.map((d, i) => {
+            const dayItems = d ? items.filter((x) => x.date === iso(d)) : [];
+            return (
+              <div key={i} className={"cal-cell" + (d ? "" : " empty")} onClick={() => d && setEditing({ ...BLANK_POST(), date: iso(d) })}>
+                {d && <span className="cal-num">{d}</span>}
+                {dayItems.slice(0, 3).map((x) => (
+                  <button key={x.id} className={"cal-chip s-" + x.status} onClick={(e) => { e.stopPropagation(); setEditing(x); }} title={x.caption}>
+                    {x.time} {(x.caption || "post").slice(0, 14)}
+                  </button>
+                ))}
+                {dayItems.length > 3 && <span className="cal-more">+{dayItems.length - 3}</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="plan-key">
+        <div className="ctrl-label">Free auto-post webhook <span className="opt">recommended</span></div>
+        <input className="topic" type="text" value={webhookUrl} autoComplete="off"
+          onChange={(e) => setWebhookUrl(e.target.value)} placeholder="Webhook URL from Make, n8n, Zapier, or self-hosted Postiz" />
+        <p className="hint">The free route. Connect your accounts once in a free tool (Make.com, n8n, or self-hosted Postiz), paste its webhook URL here, and "Send to automation" pushes each post to it to publish for you. Only X may cost money; Facebook, Instagram, Threads, and LinkedIn are free to post.</p>
+        <label className="wh-check">
+          <input type="checkbox" checked={!!webhookImages} onChange={(e) => setWebhookImages(e.target.checked)} />
+          Include slide images in the webhook. Leave off while you set Make up (images make the payload large).
+        </label>
+
+        <div className="ctrl-label">LinkedIn API token <span className="opt">for automatic PDF carousels</span></div>
+        <input className="topic" type="password" value={liToken} autoComplete="off"
+          onChange={(e) => setLiToken(e.target.value)} placeholder="Paste the access token from LinkedIn's developer token generator" />
+        <p className="hint">With a token, LinkedIn posts that have images publish as real PDF document carousels automatically. Tokens last about 60 days; regenerate and re-paste when it expires. Without a token, LinkedIn keeps posting the caption as text.</p>
+
+        <div className="ctrl-label">Ayrshare API key <span className="opt">optional, paid</span></div>
+        <input className="topic" type="password" value={ayrKey} autoComplete="off"
+          onChange={(e) => setAyrKey(e.target.value)} placeholder="Ayrshare key (paid) to auto-post to all linked accounts" />
+        <p className="hint">A paid shortcut if you prefer not to set up an automation. Your plan always lives here in your browser either way.</p>
+      </div>
+
+      <div className="plan-list">
+        <div className="ctrl-label">Upcoming</div>
+        {loaded && upcoming.length === 0 && <p className="hint">No posts yet. Click a day, or use New post, or send a draft over from the Studio.</p>}
+        {upcoming.map((x) => (
+          <div key={x.id} className="plan-item">
+            <div className="pi-top">
+              <span className="pi-date">{x.date} {x.time}</span>
+              <span className={"pi-status s-" + x.status}>{x.status}</span>
+            </div>
+            <div className="pi-cap">{(x.caption || "").slice(0, 160) || "(empty caption)"}</div>
+            <div className="pi-plats">{x.platforms.map((id) => (PLATFORMS.find((p) => p.id === id) || {}).label).join(" · ")}{x.images && x.images.length ? "  ·  " + x.images.length + " images" : ""}</div>
+            {checkViolations(x).length > 0 && (
+              <div className="pi-viol">{checkViolations(x).map((v, k) => (<div key={k}>✗ {v}</div>))}</div>
+            )}
+            <div className="pi-actions">
+              <button className="act ghost sm" onClick={() => setEditing(x)}>Edit</button>
+              <button className="act sm" onClick={() => compliancePack(x)}>Compliance pack</button>
+              {x.platforms.map((id) => (
+                <button key={id} className="act sm" onClick={() => assist(x, id)}>Post to {(PLATFORMS.find((p) => p.id === id) || {}).label}</button>
+              ))}
+              {x.images && x.images.length > 0 && (
+                <button className="act sm" onClick={() => itemPdf(x)}>PDF for LinkedIn</button>
+              )}
+              <button className="act sm auto" onClick={() => postWebhook(x)}>Send to automation</button>
+              {ayrKey.trim() && <button className="act sm" onClick={() => autoPost(x)}>Ayrshare</button>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <div className="modal-back" onClick={() => setEditing(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="ctrl-label">Caption</div>
+            <textarea className="disc-box" rows={6} value={editing.caption} onChange={(e) => setEditing({ ...editing, caption: e.target.value })} />
+            <div className="limit-note">
+              {postStats(editing).chars} characters · {postStats(editing).tags} hashtags · {postStats(editing).images} images
+            </div>
+            <div className="ctrl-label">Platforms</div>
+            <div className="plat-row">
+              {PLATFORMS.map((p) => {
+                const on = editing.platforms.includes(p.id);
+                return (
+                  <button key={p.id} className={"tone" + (on ? " on" : "")}
+                    onClick={() => setEditing({ ...editing, platforms: on ? editing.platforms.filter((x) => x !== p.id) : [...editing.platforms, p.id] })}>{p.label}</button>
+                );
+              })}
+            </div>
+            {editing.platforms.length > 0 && (
+              <div className="limit-checks">
+                {editing.platforms.map((id) => {
+                  const r = PLATFORM_RULES[id]; if (!r) return null;
+                  const probs = checkPlatform(editing, id);
+                  return (
+                    <div key={id} className={"limit-row" + (probs.length ? " bad" : "")}>
+                      {probs.length ? "✗" : "✓"} {r.name}: {probs.length ? probs.join(", ") : "fits (" + r.chars + " chars" + (isFinite(r.tags) ? ", " + r.tags + " tags" : "") + ", " + r.maxImages + " imgs max)"}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="two-col">
+              <div>
+                <div className="ctrl-label">Date</div>
+                <input className="topic" type="date" value={editing.date} onChange={(e) => setEditing({ ...editing, date: e.target.value })} />
+              </div>
+              <div>
+                <div className="ctrl-label">Time</div>
+                <input className="topic" type="time" value={editing.time} onChange={(e) => setEditing({ ...editing, time: e.target.value })} />
+              </div>
+            </div>
+            <div className="ctrl-label">Status</div>
+            <div className="tones">
+              {["draft", "scheduled", "posted"].map((s) => (
+                <button key={s} className={"tone" + (editing.status === s ? " on" : "")} onClick={() => setEditing({ ...editing, status: s })}>{s}</button>
+              ))}
+            </div>
+            <div className="slider-note">"Scheduled" posts are sent to your automation automatically at their date and time, as long as this app is open in a browser tab.</div>
+            <div className="ctrl-label">Images <span className="opt">{(editing.images || []).length} attached</span></div>
+            <div className="modal-thumbs">
+              {(editing.images || []).map((d, k) => (
+                <div key={k} className="mt-wrap">
+                  <img src={d} alt="" />
+                  <div className="mt-btns">
+                    <button title="Move left" disabled={k === 0}
+                      onClick={() => { const a = [...editing.images]; [a[k - 1], a[k]] = [a[k], a[k - 1]]; setEditing({ ...editing, images: a }); }}>‹</button>
+                    <button title="Remove"
+                      onClick={() => setEditing({ ...editing, images: editing.images.filter((_, j) => j !== k) })}>×</button>
+                    <button title="Move right" disabled={k === (editing.images || []).length - 1}
+                      onClick={() => { const a = [...editing.images]; [a[k + 1], a[k]] = [a[k], a[k + 1]]; setEditing({ ...editing, images: a }); }}>›</button>
+                  </div>
+                </div>
+              ))}
+              <button className="mt-add" onClick={() => imgRef.current && imgRef.current.click()}>+ Add</button>
+              <input ref={imgRef} type="file" accept="image/*" multiple style={{ display: "none" }}
+                onChange={(e) => { addImages(e.target.files); e.target.value = ""; }} />
+            </div>
+            <p className="hint">Studio posts arrive with their slides automatically via Send to Planner. Use + Add for your own photos; the first image is the carousel cover.</p>
+            <div className="proof-actions">
+              <button className="act" onClick={() => upsert(editing)}>Save</button>
+              <button className="act ghost" onClick={() => remove(editing.id)}>Delete</button>
+              <button className="act ghost" onClick={() => setEditing(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---- Component --------------------------------------------------------------
 function ContentDesk() {
+  const [page, setPage] = useState("studio");
+  const [ayrKey, setAyrKey] = useState(() => {
+    try { return localStorage.getItem("ayrshare_api_key") || ""; } catch (e) { return ""; }
+  });
+  function saveAyr(v) { setAyrKey(v); try { localStorage.setItem("ayrshare_api_key", v); } catch (e) {} }
+  const [webhookUrl, setWebhookUrl] = useState(() => {
+    try { return localStorage.getItem("post_webhook") || ""; } catch (e) { return ""; }
+  });
+  function saveWebhook(v) { setWebhookUrl(v); try { localStorage.setItem("post_webhook", v); } catch (e) {} }
+  const [webhookImages, setWebhookImages] = useState(() => {
+    try { return localStorage.getItem("webhook_images") === "1"; } catch (e) { return false; }
+  });
+  function saveWebhookImages(v) { setWebhookImages(v); try { localStorage.setItem("webhook_images", v ? "1" : "0"); } catch (e) {} }
+  const [liToken, setLiToken] = useState(() => {
+    try { return localStorage.getItem("li_api_token") || ""; } catch (e) { return ""; }
+  });
+  function saveLiToken(v) { setLiToken(v); try { localStorage.setItem("li_api_token", v); } catch (e) {} }
+  const [sentMsg, setSentMsg] = useState("");
   const [pillarId, setPillarId] = useState("fact");
   const [tone, setTone] = useState("Educator");
   const [lenIdx, setLenIdx] = useState(1);
+  const [slideCount, setSlideCount] = useState(5);
   const [topic, setTopic] = useState("");
-  const [themeId, setThemeId] = useState("ivory");
-  const [brandName, setBrandName] = useState("Your Name, CFP®");
-  const [brandHandle, setBrandHandle] = useState("@yourhandle");
+  const [themeId, setThemeId] = useState("ivory"); // user's choice (may be "surprise")
+  const [activeThemeId, setActiveThemeId] = useState("ivory"); // concrete theme being rendered
+  const [templateId, setTemplateId] = useState("editorial"); // user's choice (may be "surprise")
+  const [activeTemplate, setActiveTemplate] = useState("editorial"); // concrete layout being rendered
+  const [brandName, setBrandName] = useState("Matthew Pindoley, SE-AWMA®");
+  const [brandHandle, setBrandHandle] = useState("MatthewPindoley.com");
   const [disclaimer, setDisclaimer] = useState(DEFAULT_DISCLAIMER);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -437,44 +1640,109 @@ function ContentDesk() {
   const [copied, setCopied] = useState("");
   const [editDisc, setEditDisc] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
-  const [modelId, setModelId] = useState("claude-haiku-4-5-20251001");
+  const [modelId, setModelId] = useState("gpt-4o-mini");
+  const [textSource, setTextSource] = useState("openai");
+  const [photoMode, setPhotoMode] = useState("cover");
+  const [imageSource, setImageSource] = useState("pollinations");
+  const [slideImages, setSlideImages] = useState({});
+  const [imgStatus, setImgStatus] = useState("");
+  const [zipBusy, setZipBusy] = useState(false);
   const [apiKey, setApiKey] = useState(() => {
     try {
-      const stored = localStorage.getItem("anthropic_api_key");
+      const stored = localStorage.getItem("openai_api_key");
       if (stored) return stored;
       return "";
     } catch (e) { return ""; }
   });
-  // Image overlay: { slideIdx, dataUrl } or null
-  const [slideImage, setSlideImage] = useState(null);
-  const imageInputRef = useRef(null);
+  const [pexelsKey, setPexelsKey] = useState(() => {
+    try { return localStorage.getItem("pexels_api_key") || ""; } catch (e) { return ""; }
+  });
+  function savePexels(v) {
+    setPexelsKey(v);
+    try { localStorage.setItem("pexels_api_key", v); } catch (e) {}
+  }
+  const [groqKey, setGroqKey] = useState(() => {
+    try { return localStorage.getItem("groq_api_key") || ""; } catch (e) { return ""; }
+  });
+  function saveGroq(v) {
+    setGroqKey(v);
+    try { localStorage.setItem("groq_api_key", v); } catch (e) {}
+  }
   const canvasRef = useRef(null);
+  const recentRef = useRef([]); // last few hooks/topics, to push the model off repeats
+  const lastTplRef = useRef("editorial"); // last layout used, so "Surprise" can avoid repeats
+  const lastThemeRef = useRef("ivory"); // last theme used, same reason
+  const autoBusyRef = useRef({}); // post ids currently being auto-sent
+
+  // Scheduler: while this app is open, posts marked "scheduled" are sent to
+  // the automation webhook automatically when their date and time arrive.
+  useEffect(() => {
+    const tick = async () => {
+      const url = (webhookUrl || "").trim();
+      if (!url) return;
+      let plan;
+      try { plan = (await idbGet("plan")) || []; } catch (e) { return; }
+      if (!Array.isArray(plan)) return;
+      const now = Date.now();
+      let changed = false;
+      for (const it of plan) {
+        if (it.status !== "scheduled" || !it.date || !it.time) continue;
+        const due = new Date(it.date + "T" + it.time).getTime();
+        if (isNaN(due) || due > now || autoBusyRef.current[it.id]) continue;
+        autoBusyRef.current[it.id] = true;
+        if (checkViolations(it).length) {
+          // Do not auto-post something a platform would reject; park it back
+          // as a draft so it stops retrying and the owner can fix it.
+          it.status = "draft";
+          changed = true;
+          continue;
+        }
+        try {
+          await sendItemToWebhook(it, url, webhookImages, liToken);
+          it.status = "posted";
+          changed = true;
+        } catch (e) {
+          delete autoBusyRef.current[it.id]; // network hiccup: retry next tick
+        }
+      }
+      if (changed) {
+        try { await idbSet("plan", plan); window.dispatchEvent(new Event("plan-updated")); } catch (e) {}
+      }
+    };
+    const t = setInterval(tick, 30000);
+    tick();
+    return () => clearInterval(t);
+  }, [webhookUrl, webhookImages, liToken]);
 
   function saveKey(v) {
     setApiKey(v);
-    try { localStorage.setItem("anthropic_api_key", v); } catch (e) {}
-  }
-
-  function handleImageFile(file) {
-    if (!file || !file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = (e) => setSlideImage({ slideIdx: slide, dataUrl: e.target.result });
-    reader.readAsDataURL(file);
+    try { localStorage.setItem("openai_api_key", v); } catch (e) {}
   }
 
   const pillar = PILLARS.find((p) => p.id === pillarId);
   const liveTopic = topic.trim();
   const slides = result?.carousel || [];
 
-  const theme = THEMES[themeId];
+  const theme = THEMES[activeThemeId] || THEMES.ivory;
   const brand = useMemo(
-    () => ({ name: brandName.trim() || "Your Name", handle: brandHandle.trim() || "@yourhandle" }),
+    () => ({ name: brandName.trim() || "Matthew Pindoley, SE-AWMA®", handle: brandHandle.trim() || "MatthewPindoley.com" }),
     [brandName, brandHandle]
   );
   const drawOpts = useMemo(
-    () => ({ theme, kicker: pillar.label.toUpperCase(), brand }),
-    [theme, pillar.label, brand]
+    () => ({ theme, template: activeTemplate, kicker: pillar.label.toUpperCase(), brand }),
+    [theme, activeTemplate, pillar.label, brand]
   );
+
+  // Picking a concrete layout updates the live preview immediately. "Surprise"
+  // is resolved to a random layout at Generate time instead.
+  useEffect(() => {
+    if (templateId !== "surprise") setActiveTemplate(templateId);
+  }, [templateId]);
+
+  // Same live-preview behavior for the color theme.
+  useEffect(() => {
+    if (themeId !== "surprise") setActiveThemeId(themeId);
+  }, [themeId]);
 
   useEffect(() => {
     let dead = false;
@@ -493,66 +1761,74 @@ function ContentDesk() {
     return () => { dead = true; };
   }, []);
 
-  // Preload the image object when a new image is set.
   useEffect(() => {
-    if (!slideImage || !slideImage.dataUrl) return;
-    const img = new Image();
-    img.onload = () => setSlideImage((prev) => prev ? { ...prev, _img: img } : prev);
-    img.src = slideImage.dataUrl;
-  }, [slideImage?.dataUrl]);
+    if (view !== "carousel" || !canvasRef.current || !slides[slide]) return;
+    drawSlide(canvasRef.current, slides[slide], slide, slides.length, drawOpts, slideImages[slide]);
+  }, [view, slide, result, fontsReady, drawOpts, slideImages]);
 
-  useEffect(() => {
-    const img = (slideImage && slideImage.slideIdx === slide) ? slideImage._img : null;
-    drawSlide(canvasRef.current, slides[slide], slide, slides.length, drawOpts, img);
-  }, [view, slide, result, fontsReady, drawOpts, slideImage]);
+  // A few rotating creative nudges so repeated clicks diverge instead of
+  // converging on one "safe" answer.
+  const SPINS = [
+    "Take an unexpected angle most advisors would not think of.",
+    "Use a fresh real-world analogy nobody overuses.",
+    "Lead with a surprising contrast or a counterintuitive truth.",
+    "Approach it through a specific, vivid everyday moment.",
+    "Frame it around a question the reader has felt but never voiced.",
+    "Find a non-obvious connection between two unrelated ideas.",
+  ];
 
   async function generate() {
-    if (!apiKey.trim()) {
-      setError("Add your Anthropic API key above to generate.");
-      return;
-    }
-    // Rotate palette on every new generate so each carousel looks distinct.
-    const nextThemeId = nextTheme(themeId);
-    setThemeId(nextThemeId);
-    // Clear any pinned slide image so it doesn't bleed into the new post.
-    setSlideImage(null);
     setLoading(true); setError(""); setResult(null); setSlide(0); setView("post");
+    setSlideImages({}); setImgStatus("");
+    // Resolve the layout. "Surprise" rolls a random one, avoiding a repeat.
+    let layout = templateId;
+    if (templateId === "surprise") {
+      const choices = TEMPLATES.map((t) => t.id).filter((id) => id !== lastTplRef.current);
+      layout = choices[Math.floor(Math.random() * choices.length)] || "editorial";
+      setActiveTemplate(layout);
+    }
+    lastTplRef.current = layout;
+    // Same for the color theme.
+    let themePick = themeId;
+    if (themeId === "surprise") {
+      const keys = Object.keys(THEMES).filter((k) => k !== lastThemeRef.current);
+      themePick = keys[Math.floor(Math.random() * keys.length)] || "ivory";
+      setActiveThemeId(themePick);
+    }
+    lastThemeRef.current = themePick;
     try {
-      // Inject a random seed so the model always produces a fresh result.
-      const seed = Math.random().toString(36).slice(2, 8).toUpperCase();
-      const userMsg = (liveTopic
+      const nonce = Math.random().toString(36).slice(2, 8);
+      const spin = SPINS[Math.floor(Math.random() * SPINS.length)];
+      const avoid = recentRef.current.length
+        ? ` Do NOT repeat or closely resemble any of these recent posts (pick a different topic, angle, and opening line): ${recentRef.current.map((h) => `"${h}"`).join("; ")}.`
+        : "";
+      const base = liveTopic
         ? `Topic / angle to use: "${liveTopic}". Generate the ${pillar.label} post and carousel around this.`
-        : `No topic given, choose a fresh interesting one yourself. Generate the ${pillar.label} post and carousel.`)
-        + ` [RUN-ID:${seed}]`;
-      const response = await fetch(ANTHROPIC_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey.trim(),
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: modelId,
-          max_tokens: 1200,
-          system: buildSystemPrompt(pillar, tone, LEN_WORDS[lenIdx], LEN_LABELS[lenIdx]),
-          messages: [
-            { role: "user", content: userMsg },
-          ],
-        }),
-      });
-      if (!response.ok) {
-        let detail = "";
-        try { detail = (await response.json())?.error?.message || ""; } catch (e) {}
-        if (response.status === 401) throw new Error("Your Anthropic API key was rejected (401). Check the key.");
-        if (response.status === 429) throw new Error("Anthropic rate limit or quota reached (429). " + detail);
-        throw new Error("Anthropic error " + response.status + ". " + detail);
+        : `No topic given, choose a fresh interesting one yourself. Generate the ${pillar.label} post and carousel.`;
+      const userMsg = `${base}\n\n${spin} Make this draft distinctly different from anything generic. Variation token: ${nonce}.${avoid}`;
+      const system = buildSystemPrompt(pillar, tone, LEN_WORDS[lenIdx], LEN_LABELS[lenIdx], slideCount);
+      // Draft from the chosen writer, then parse its JSON.
+      const draftOnce = async () => {
+        const raw = textSource === "groq" ? await groqDraft(system, userMsg) : await openaiDraft(system, userMsg);
+        const cleaned = raw.replace(/```json|```/g, "").trim();
+        return cleanResult(JSON.parse(cleaned.slice(cleaned.indexOf("{"), cleaned.lastIndexOf("}") + 1)));
+      };
+      // Retry occasional malformed JSON from the free writer. Never retry key errors.
+      const attempts = textSource === "openai" ? 1 : 3;
+      let parsed = null, lastErr = null;
+      for (let a = 0; a < attempts; a++) {
+        try { parsed = await draftOnce(); break; }
+        catch (e) {
+          lastErr = e;
+          if (/key|401|403/i.test((e && e.message) || "")) throw e;
+        }
       }
-      const data = await response.json();
-      const raw = data.content?.[0]?.text || "";
-      const cleaned = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(cleaned.slice(cleaned.indexOf("{"), cleaned.lastIndexOf("}") + 1));
-      setResult(cleanResult(parsed));
+      if (!parsed) throw new Error((lastErr && lastErr.message) ? ("Draft failed after retries: " + lastErr.message) : "That draft did not come through cleanly. Try Generate again.");
+      setResult(parsed);
+      // remember this hook so the next Generate avoids it
+      recentRef.current = [parsed.hook, ...recentRef.current].filter(Boolean).slice(0, 10);
+      // fire off photo generation (does not block the text from showing)
+      if (photoMode !== "off") genImages(parsed.carousel || [], photoMode);
     } catch (e) {
       setError(e && e.message ? e.message : "That draft didn't come through cleanly. Try Generate again.");
     } finally {
@@ -560,9 +1836,197 @@ function ContentDesk() {
     }
   }
 
+  // --- Writers. Each takes the system + user prompt and returns the raw JSON
+  // string the model produced. -------------------------------------------------
+  async function openaiDraft(system, user) {
+    const key = apiKey.trim();
+    if (!key) throw new Error("Add your OpenAI API key to write with OpenAI, or switch Writer to Free.");
+    const r = await fetch(OPENAI_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+      body: JSON.stringify({
+        model: modelId, temperature: 1.0, top_p: 0.95, presence_penalty: 0.6, frequency_penalty: 0.4,
+        max_tokens: 1500, response_format: { type: "json_object" },
+        messages: [{ role: "system", content: system }, { role: "user", content: user }],
+      }),
+    });
+    if (!r.ok) {
+      let d = ""; try { d = (await r.json())?.error?.message || ""; } catch (e) {}
+      if (r.status === 401) throw new Error("OpenAI key rejected (401). Check the key.");
+      if (r.status === 429) throw new Error("OpenAI quota or rate limit (429). " + d);
+      throw new Error("OpenAI error " + r.status + ". " + d);
+    }
+    return (await r.json()).choices?.[0]?.message?.content || "";
+  }
+
+  async function groqDraft(system, user) {
+    const key = groqKey.trim();
+    if (!key) throw new Error("Add your free Groq API key (console.groq.com) to write with Groq, or switch Writer to Free.");
+    const r = await fetch(GROQ_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+      body: JSON.stringify({
+        model: GROQ_MODEL, temperature: 1.0, top_p: 0.95, max_tokens: 2048,
+        response_format: { type: "json_object" },
+        messages: [{ role: "system", content: system }, { role: "user", content: user }],
+      }),
+    });
+    if (!r.ok) {
+      let d = ""; try { d = (await r.json())?.error?.message || ""; } catch (e) {}
+      if (r.status === 401) throw new Error("Groq key rejected (401). Check the key.");
+      if (r.status === 429) throw new Error("Groq rate limit (429). Wait a moment and try again. " + d);
+      throw new Error("Groq error " + r.status + ". " + d);
+    }
+    return (await r.json()).choices?.[0]?.message?.content || "";
+  }
+
+  // Fetch one photo per targeted slide from the chosen source, load it as a
+  // data URL (so the canvas stays exportable), and store it.
+  async function genImages(carousel, mode) {
+    const targets = mode === "all" ? carousel.map((_, i) => i) : [0];
+    let made = 0, lastErr = "";
+    for (let t = 0; t < targets.length; t++) {
+      const i = targets[t];
+      setImgStatus("Fetching image " + (t + 1) + " of " + targets.length + "...");
+      const s = carousel[i] || {};
+      try {
+        let dataUrl = null;
+        if (imageSource === "pexels") dataUrl = await pexelsImage(s);
+        else if (imageSource === "openai") dataUrl = await openaiImage(s);
+        else dataUrl = await pollinationsImage(s);
+        if (dataUrl) {
+          await new Promise((res) => {
+            const im = new Image();
+            im.onload = () => { setSlideImages((prev) => ({ ...prev, [i]: im })); res(); };
+            im.onerror = () => res();
+            im.src = dataUrl;
+          });
+          made += 1;
+        } else {
+          lastErr = "No image was returned.";
+        }
+      } catch (e) {
+        lastErr = e && e.message ? e.message : String(e);
+        // Setup / auth / quota problems repeat for every slide, so stop now.
+        if (/key|401|403|quota|429/i.test(lastErr)) { setImgStatus(lastErr); return; }
+      }
+    }
+    setImgStatus(made ? "" : (lastErr || "No images were created."));
+  }
+
+  // Free real stock photo from Pexels, keyed to the slide.
+  async function pexelsImage(s) {
+    const key = pexelsKey.trim();
+    if (!key) throw new Error("Add your free Pexels API key (pexels.com/api) to use stock photos, or switch Image source to Free AI.");
+    const primary = String(s.image_query || s.image_prompt || s.title || s.headline || "minimal texture").slice(0, 80);
+    const broad = primary.split(/[.,]/)[0].split(/\s+/).slice(0, 2).join(" ");
+    const queries = [primary];
+    if (broad && broad !== primary) queries.push(broad);
+    queries.push("minimal muted background texture");
+    for (const q of queries) {
+      const r = await fetch(PEXELS_ENDPOINT + "?per_page=20&orientation=portrait&query=" + encodeURIComponent(q), { headers: { Authorization: key } });
+      if (!r.ok) {
+        if (r.status === 401) throw new Error("Pexels key rejected (401). Check the key.");
+        if (r.status === 429) throw new Error("Pexels quota reached (429). It resets hourly.");
+        throw new Error("Pexels error " + r.status + ".");
+      }
+      const d = await r.json();
+      const photos = d.photos || [];
+      if (photos.length) {
+        const pick = photos[Math.floor(Math.random() * photos.length)];
+        // Prefer the largest renditions so slides never upscale a small crop.
+        const url = pick.src && (pick.src.large2x || pick.src.original || pick.src.large || pick.src.portrait);
+        if (url) {
+          const ir = await fetch(url);
+          if (ir.ok) return await blobToDataUrl(await ir.blob());
+        }
+      }
+    }
+    throw new Error("No stock photo matched this slide. Try a different topic.");
+  }
+
+  // Free AI image from Pollinations, no key required.
+  async function pollinationsImage(s) {
+    const subject = s.image_prompt || s.title || s.headline || "calm minimal still life";
+    const seed = Math.floor(Math.random() * 1e9);
+    // Exact 4:5 slide size, so nothing is cropped or upscaled.
+    const url = POLLINATIONS_ENDPOINT + encodeURIComponent(subject + ". " + IMAGE_STYLE) +
+      "?width=1080&height=1350&nologo=true&seed=" + seed + "&model=flux";
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("Free AI image service error " + r.status + ". Try again in a moment.");
+    return await blobToDataUrl(await r.blob());
+  }
+
+  // Paid AI image from OpenAI, trying the current model then the legacy one.
+  async function openaiImage(s) {
+    const key = apiKey.trim();
+    if (!key) throw new Error("Add your OpenAI API key to use OpenAI images.");
+    const VARY = ["", " Shot from a slightly different angle.", " Different time of day and light.", " Alternative composition and framing.", " A different but related subject in the same style."];
+    const subject = s.image_prompt || s.title || s.headline || "an abstract calm financial concept";
+    const prompt = subject + ". " + IMAGE_STYLE + VARY[Math.floor(Math.random() * VARY.length)];
+    let lastErr = "";
+    for (const cfg of IMAGE_ATTEMPTS) {
+      try {
+        const r = await fetch(OPENAI_IMAGE_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+          body: JSON.stringify({ model: cfg.model, prompt, n: 1, ...cfg.extra }),
+        });
+        if (r.ok) {
+          const d = await r.json();
+          const b64 = d.data?.[0]?.b64_json;
+          if (b64) return "data:image/png;base64," + b64;
+          lastErr = cfg.model + " returned no image data.";
+        } else {
+          let m = ""; try { m = (await r.json())?.error?.message || ""; } catch (e) {}
+          lastErr = cfg.model + " error " + r.status + (m ? ": " + m : "") + ".";
+          if (r.status === 401) throw new Error("OpenAI key rejected (401).");
+          if (r.status === 429) throw new Error("OpenAI quota or rate limit (429). " + m);
+        }
+      } catch (e) {
+        if (/OpenAI key|quota|429/i.test(e && e.message)) throw e;
+        lastErr = e && e.message ? e.message : String(e);
+      }
+    }
+    throw new Error(lastErr || "OpenAI image failed. It may require organization verification or billing.");
+  }
+
+  // Snapshot the current slides as PNG data URLs and save the post to the Planner.
+  async function sendToPlanner() {
+    if (!result) return;
+    const images = [];
+    for (let i = 0; i < slides.length; i++) {
+      const c = document.createElement("canvas");
+      drawSlide(c, slides[i], i, slides.length, drawOpts, slideImages[i]);
+      images.push(c.toDataURL("image/png"));
+    }
+    const item = {
+      id: "p" + Date.now() + Math.random().toString(36).slice(2, 6),
+      caption: fullPostText(),
+      platforms: ["linkedin"],
+      date: new Date().toISOString().slice(0, 10),
+      time: "09:00", status: "draft", images,
+    };
+    try {
+      const plan = (await idbGet("plan")) || [];
+      await idbSet("plan", [...(Array.isArray(plan) ? plan : []), item]);
+      setSentMsg("Saved to Planner");
+      setTimeout(() => setSentMsg(""), 2500);
+    } catch (e) {
+      setError("Could not save to the Planner on this browser.");
+    }
+  }
+
+  // Make fresh photos for the current post without rewriting any text.
+  function regenPhotos() {
+    if (!result || photoMode === "off" || imgStatus) return;
+    genImages(result.carousel || [], photoMode);
+  }
+
   function fullPostText() {
     if (!result) return "";
-    return `${result.hook}\n\n${result.body}\n\n${disclaimer}\n\n` + (result.hashtags || []).join(" ");
+    const disc = pillar.general ? "" : `${disclaimer}\n\n`;
+    return `${result.hook}\n\n${result.body}\n\n${disc}` + (result.hashtags || []).join(" ");
   }
 
   function copy(text, key) {
@@ -576,10 +2040,43 @@ function ContentDesk() {
   function downloadAll() {
     slides.forEach((s, i) => {
       const c = document.createElement("canvas");
-      const img = (slideImage && slideImage.slideIdx === i) ? slideImage._img : null;
-      drawSlide(c, s, i, slides.length, drawOpts, img);
-      setTimeout(() => downloadCanvas(c, `carousel-slide-${i + 1}.png`), i * 280);
+      drawSlide(c, s, i, slides.length, drawOpts, slideImages[i]);
+      setTimeout(() => downloadCanvas(c, `carousel-slide-${i + 1}.jpg`), i * 280);
     });
+  }
+
+  // One file with the caption and every slide, ready to upload in one go.
+  async function downloadZip() {
+    if (!result || zipBusy) return;
+    setZipBusy(true);
+    try {
+      const files = [{ name: "caption.txt", data: new TextEncoder().encode(fullPostText()) }];
+      for (let i = 0; i < slides.length; i++) {
+        const c = document.createElement("canvas");
+        drawSlide(c, slides[i], i, slides.length, drawOpts, slideImages[i]);
+        const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.95));
+        const buf = new Uint8Array(await blob.arrayBuffer());
+        files.push({ name: "slide-" + String(i + 1).padStart(2, "0") + ".jpg", data: buf });
+      }
+      downloadBlob(makeZip(files), "linkedin-carousel.zip");
+    } catch (e) {
+      setError("Could not build the zip. Try Download all instead.");
+    } finally {
+      setZipBusy(false);
+    }
+  }
+
+  // The LinkedIn carousel format: every slide as a page of one PDF, uploaded
+  // to LinkedIn as a document post.
+  function downloadPdf() {
+    if (!result || !slides.length) return;
+    const urls = [];
+    for (let i = 0; i < slides.length; i++) {
+      const c = document.createElement("canvas");
+      drawSlide(c, slides[i], i, slides.length, drawOpts, slideImages[i]);
+      urls.push(c.toDataURL("image/jpeg", 0.95));
+    }
+    downloadBlob(makePdf(urls), "linkedin-carousel.pdf");
   }
 
   return (
@@ -591,28 +2088,50 @@ function ContentDesk() {
           <div className="mast-eyebrow">CONTENT STUDIO &middot; FINANCIAL ADVISOR</div>
           <h1 className="mast-title">The Desk</h1>
         </div>
-        <div className="mast-right">
-          <span className="mast-meta">NO EM DASHES</span>
-          <span className="mast-dot" />
-          <span className="mast-meta">COMPLIANCE-AWARE</span>
+        <div className="mast-nav">
+          <button className={"navtab" + (page === "studio" ? " on" : "")} onClick={() => setPage("studio")}>Studio</button>
+          <button className={"navtab" + (page === "planner" ? " on" : "")} onClick={() => setPage("planner")}>Planner</button>
         </div>
       </header>
 
+      {page === "planner" && (
+        <Planner ayrKey={ayrKey} setAyrKey={saveAyr} webhookUrl={webhookUrl} setWebhookUrl={saveWebhook}
+          webhookImages={webhookImages} setWebhookImages={saveWebhookImages}
+          liToken={liToken} setLiToken={saveLiToken} onBack={() => setPage("studio")} />
+      )}
+
+      {page === "studio" && (
       <div className="grid">
         <section className="controls">
-          <div className="ctrl-label">Anthropic API key</div>
-          <input className="topic" type="password" value={apiKey} autoComplete="off"
-            onChange={(e) => saveKey(e.target.value)} placeholder="sk-ant-..." />
-          <div className="slider-note">
-            {apiKey.trim() ? "Key saved in this browser only." : "Paste your key. Stored in this browser only, sent only to Anthropic."}
-          </div>
-
-          <div className="ctrl-label">Model</div>
+          <div className="ctrl-label">Writer <span className="opt">who writes the text</span></div>
           <div className="tones">
-            {ANTHROPIC_MODELS.map((m) => (
-              <button key={m.id} className={"tone" + (m.id === modelId ? " on" : "")} onClick={() => setModelId(m.id)}>{m.label}</button>
+            {TEXT_SOURCES.map((m) => (
+              <button key={m.id} className={"tone" + (m.id === textSource ? " on" : "")} onClick={() => setTextSource(m.id)}>{m.label}</button>
             ))}
           </div>
+          <div className="slider-note">{(TEXT_SOURCES.find((s) => s.id === textSource) || {}).note}</div>
+          {textSource === "groq" && (
+            <input className="topic mt8" type="password" value={groqKey} autoComplete="off"
+              onChange={(e) => saveGroq(e.target.value)} placeholder="Groq API key (free at console.groq.com)" />
+          )}
+
+          {(textSource === "openai" || imageSource === "openai") && (
+            <>
+              <div className="ctrl-label">OpenAI API key</div>
+              <input className="topic" type="password" value={apiKey} autoComplete="off"
+                onChange={(e) => saveKey(e.target.value)} placeholder="sk-..." />
+            </>
+          )}
+          {textSource === "openai" && (
+            <>
+              <div className="ctrl-label">OpenAI model</div>
+              <div className="tones">
+                {OPENAI_MODELS.map((m) => (
+                  <button key={m.id} className={"tone" + (m.id === modelId ? " on" : "")} onClick={() => setModelId(m.id)}>{m.label}</button>
+                ))}
+              </div>
+            </>
+          )}
 
           <div className="ctrl-label">Pillar</div>
           <div className="pillars">
@@ -639,6 +2158,14 @@ function ContentDesk() {
           </div>
           <div className="slider-note">Up to ~{LEN_WORDS[lenIdx]} words. A ceiling, not a target.</div>
 
+          <div className="ctrl-label">Slides <span className="opt">1 to 5</span></div>
+          <div className="tones">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} className={"tone" + (n === slideCount ? " on" : "")} onClick={() => setSlideCount(n)}>{n}</button>
+            ))}
+          </div>
+          <div className="slider-note">{slideCount === 1 ? "One cover slide (a title, plus a photo if enabled)." : slideCount + " slides in the carousel."}</div>
+
           <div className="ctrl-label">Voice</div>
           <div className="tones">
             {TONES.map((t) => (
@@ -646,7 +2173,17 @@ function ContentDesk() {
             ))}
           </div>
 
-          <div className="ctrl-label">Carousel theme <span className="opt">rotates on each generate</span></div>
+          <div className="ctrl-label">Carousel layout</div>
+          <div className="layouts">
+            {[...TEMPLATES, { id: "surprise", label: "Surprise", blurb: "Random layout each time you generate." }].map((t) => (
+              <button key={t.id} className={"tone" + (t.id === templateId ? " on" : "")} onClick={() => setTemplateId(t.id)} title={t.blurb}>{t.label}</button>
+            ))}
+          </div>
+          {templateId === "surprise" && (
+            <div className="slider-note">A random layout is chosen on each Generate.</div>
+          )}
+
+          <div className="ctrl-label">Carousel theme</div>
           <div className="themes">
             {Object.entries(THEMES).map(([id, t]) => (
               <button key={id} className={"theme-btn" + (id === themeId ? " on" : "")} onClick={() => setThemeId(id)}>
@@ -656,7 +2193,47 @@ function ContentDesk() {
                 <span className="theme-name">{t.name}</span>
               </button>
             ))}
+            <button className={"theme-btn" + (themeId === "surprise" ? " on" : "")} onClick={() => setThemeId("surprise")}
+              title="A random theme each time you generate.">
+              <span className="sw" style={{ background: "#C7A266" }} />
+              <span className="sw" style={{ background: "#2F6B62" }} />
+              <span className="sw" style={{ background: "#6E4A8E" }} />
+              <span className="theme-name">Surprise</span>
+            </button>
           </div>
+          {themeId === "surprise" && (
+            <div className="slider-note">A random theme is chosen on each Generate.</div>
+          )}
+
+          <div className="ctrl-label">Slide photos <span className="opt">optional</span></div>
+          <div className="tones">
+            {PHOTO_MODES.map((m) => (
+              <button key={m.id} className={"tone" + (m.id === photoMode ? " on" : "")} onClick={() => setPhotoMode(m.id)}>{m.label}</button>
+            ))}
+          </div>
+          <div className="slider-note">
+            {photoMode === "off"
+              ? "Clean color slides, no images."
+              : photoMode === "cover"
+              ? "A photo behind the cover slide only."
+              : "A different photo behind every slide."}
+          </div>
+
+          {photoMode !== "off" && (
+            <>
+              <div className="ctrl-label">Image source</div>
+              <div className="tones">
+                {IMAGE_SOURCES.map((m) => (
+                  <button key={m.id} className={"tone" + (m.id === imageSource ? " on" : "")} onClick={() => setImageSource(m.id)}>{m.label}</button>
+                ))}
+              </div>
+              <div className="slider-note">{(IMAGE_SOURCES.find((s) => s.id === imageSource) || {}).note}</div>
+              {imageSource === "pexels" && (
+                <input className="topic mt8" type="password" value={pexelsKey} autoComplete="off"
+                  onChange={(e) => savePexels(e.target.value)} placeholder="Pexels API key (free at pexels.com/api)" />
+              )}
+            </>
+          )}
 
           <div className="ctrl-label">Byline <span className="opt">on every slide</span></div>
           <input className="topic" value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="Your Name, CFP" />
@@ -665,7 +2242,7 @@ function ContentDesk() {
           <button className="generate" onClick={generate} disabled={loading}>
             {loading ? "Drafting..." : liveTopic ? "Generate draft" : "Surprise me"}
           </button>
-          <p className="hint">Generates a fresh post and matching carousel every time. Theme rotates automatically. The byline ties them as one piece. Always route to your back office before publishing.</p>
+          <p className="hint">Generates a post and a matching image carousel together. The byline ties them as one piece. Always route to your back office before publishing.</p>
         </section>
 
         <section className="output">
@@ -683,7 +2260,7 @@ function ContentDesk() {
               <div className="tabs">
                 <button className={"tab" + (view === "post" ? " on" : "")} onClick={() => setView("post")}>Post</button>
                 <button className={"tab" + (view === "carousel" ? " on" : "")} onClick={() => setView("carousel")}>Carousel</button>
-                <div className="tab-meta">{pillar.tag} &middot; {LEN_LABELS[lenIdx].toUpperCase()} &middot; {theme.name.toUpperCase()}</div>
+                <div className="tab-meta">{((TEMPLATES.find((t) => t.id === activeTemplate) || {}).label || "").toUpperCase()} &middot; {theme.name.toUpperCase()}</div>
               </div>
 
               {view === "post" && (
@@ -693,7 +2270,7 @@ function ContentDesk() {
                   <div className="proof-body">
                     {String(result.body || "").split("\n").filter(Boolean).map((line, i) => (<p key={i}>{line}</p>))}
                   </div>
-                  <div className="proof-disc">{disclaimer}</div>
+                  {!pillar.general && <div className="proof-disc">{disclaimer}</div>}
                   <div className="proof-tags">
                     {(result.hashtags || []).map((h, i) => (<span key={i} className="tagchip">{h}</span>))}
                   </div>
@@ -705,12 +2282,14 @@ function ContentDesk() {
 
                   {slides.length > 0 && (
                     <div className="proof-carousel">
-                      <div className="thumbs-label">CAROUSEL &middot; {slides.length} SLIDES &middot; CLICK TO OPEN</div>
+                      <div className="thumbs-label">
+                        CAROUSEL &middot; {slides.length} SLIDES &middot; CLICK TO OPEN
+                        {imgStatus ? <span className="img-status"> &middot; {imgStatus}</span> : null}
+                      </div>
                       <div className="thumbs">
                         {slides.map((s, i) => (
                           <SlideThumb key={i} slide={s} i={i} total={slides.length} opts={drawOpts}
-                            ready={fontsReady} active={false}
-                            overlayImg={(slideImage && slideImage.slideIdx === i) ? slideImage._img : null}
+                            img={slideImages[i]} ready={fontsReady} active={false}
                             onClick={() => { setView("carousel"); setSlide(i); }} />
                         ))}
                       </div>
@@ -719,7 +2298,14 @@ function ContentDesk() {
 
                   <div className="proof-actions">
                     <button className="act" onClick={() => copy(fullPostText(), "post")}>{copied === "post" ? "Copied ✓" : "Copy post"}</button>
-                    <button className="act ghost" onClick={generate}>New draft</button>
+                    <button className="act" onClick={sendToPlanner}>{sentMsg || "Send to Planner"}</button>
+                    <button className="act" onClick={downloadZip} disabled={zipBusy}>{zipBusy ? "Zipping..." : "Download .zip"}</button>
+                    <button className="act ghost" onClick={generate}>Regenerate</button>
+                    {photoMode !== "off" && (
+                      <button className="act ghost" onClick={regenPhotos} disabled={!!imgStatus}>
+                        {imgStatus ? "Working..." : "Regenerate photos"}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -734,52 +2320,47 @@ function ContentDesk() {
                   <div className="dots">
                     {slides.map((_, i) => (<button key={i} className={"dot" + (i === slide ? " on" : "")} onClick={() => setSlide(i)} />))}
                   </div>
-                  {/* Image overlay controls for current slide */}
-                  <div className="img-overlay-row">
-                    <input
-                      ref={imageInputRef}
-                      type="file"
-                      accept="image/*"
-                      style={{ display: "none" }}
-                      onChange={(e) => { if (e.target.files[0]) handleImageFile(e.target.files[0]); e.target.value = ""; }}
-                    />
-                    <button className="act ghost img-btn" onClick={() => imageInputRef.current && imageInputRef.current.click()}>
-                      {(slideImage && slideImage.slideIdx === slide) ? "Change image" : "+ Add image to this slide"}
-                    </button>
-                    {slideImage && slideImage.slideIdx === slide && (
-                      <button className="act ghost img-btn" onClick={() => setSlideImage(null)}>Remove image</button>
-                    )}
-                    <span className="img-hint">Image fades into the top of slide {slide + 1}</span>
-                  </div>
                   <div className="proof-actions center">
-                    <button className="act" onClick={() => canvasRef.current && downloadCanvas(canvasRef.current, `carousel-slide-${slide + 1}.png`)}>Download this slide</button>
-                    <button className="act" onClick={downloadAll}>Download all</button>
-                    <button className="act ghost" onClick={generate}>New draft</button>
+                    <button className="act" onClick={downloadZip} disabled={zipBusy}>{zipBusy ? "Zipping..." : "Download .zip (caption + slides)"}</button>
+                    <button className="act" onClick={downloadPdf}>PDF (LinkedIn carousel)</button>
+                    <button className="act" onClick={() => canvasRef.current && downloadCanvas(canvasRef.current, `carousel-slide-${slide + 1}.jpg`)}>This slide</button>
+                    <button className="act" onClick={downloadAll}>All slides</button>
+                    {photoMode !== "off" && (
+                      <button className="act ghost" onClick={regenPhotos} disabled={!!imgStatus}>
+                        {imgStatus ? "Working..." : "Regenerate photos"}
+                      </button>
+                    )}
+                    <button className="act ghost" onClick={generate}>Regenerate all</button>
                   </div>
-                  <p className="hint center">1080 &times; 1350 PNG slides, ready to upload. The minimal slides pull the swipe; the full read lives in your post caption.</p>
+                  <p className="hint center">
+                    1080 &times; 1350 JPG slides, compliance-friendly and ready to upload. {imgStatus ? imgStatus : "The minimal slides pull the swipe; the full read lives in your post caption."}
+                  </p>
                 </div>
               )}
 
-              <div className="compliance">
-                <div className="comp-head">
-                  <span>Before you submit to back office</span>
-                  <button className="disc-edit" onClick={() => setEditDisc((v) => !v)}>{editDisc ? "Done" : "Edit disclaimer"}</button>
-                </div>
-                {editDisc && (<textarea className="disc-box" value={disclaimer} onChange={(e) => setDisclaimer(e.target.value)} rows={3} />)}
-                <ul className="checks">
-                  {STATIC_CHECKS.map((c, i) => (<li key={i}><span className="tick">&#10003;</span>{c}</li>))}
-                </ul>
-                {result.reviewer_notes && result.reviewer_notes.length > 0 && (
-                  <div className="flags">
-                    <div className="flags-head">Flag for this draft</div>
-                    {result.reviewer_notes.map((n, i) => (<div key={i} className="flag">{n}</div>))}
+              {!pillar.general && (
+                <div className="compliance">
+                  <div className="comp-head">
+                    <span>Before you submit to back office</span>
+                    <button className="disc-edit" onClick={() => setEditDisc((v) => !v)}>{editDisc ? "Done" : "Edit disclaimer"}</button>
                   </div>
-                )}
-              </div>
+                  {editDisc && (<textarea className="disc-box" value={disclaimer} onChange={(e) => setDisclaimer(e.target.value)} rows={3} />)}
+                  <ul className="checks">
+                    {STATIC_CHECKS.map((c, i) => (<li key={i}><span className="tick">&#10003;</span>{c}</li>))}
+                  </ul>
+                  {result.reviewer_notes && result.reviewer_notes.length > 0 && (
+                    <div className="flags">
+                      <div className="flags-head">Flag for this draft</div>
+                      {result.reviewer_notes.map((n, i) => (<div key={i} className="flag">{n}</div>))}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </section>
       </div>
+      )}
     </div>
   );
 }
@@ -801,6 +2382,65 @@ const css = `
 .mast-title{font-family:'Newsreader',serif;font-weight:500;font-size:42px;letter-spacing:-.01em;margin:0;line-height:1;}
 .mast-right{display:flex;align-items:center;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.18em;color:var(--muted);}
 .mast-dot{width:4px;height:4px;border-radius:50%;background:var(--brass-dim);}
+.mast-nav{display:flex;gap:8px;}
+.navtab{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:9px;padding:9px 18px;font-family:'Newsreader',serif;font-size:16px;cursor:pointer;}
+.navtab:hover{color:var(--text);border-color:var(--brass-dim);}
+.navtab.on{color:var(--brass);border-color:var(--brass);background:#20262F;}
+
+.planner{max-width:900px;}
+.plan-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+.plan-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.plan-status{font-size:12.5px;color:var(--brass);font-family:'IBM Plex Mono',monospace;}
+.act.sm{padding:6px 11px;font-size:12px;}
+.act.auto{background:var(--brass);color:#1A1407;}
+.planner .act.ghost{color:var(--text);border-color:var(--line);background:none;}
+.planner .act.ghost:hover{border-color:var(--brass);color:var(--brass);}
+.cal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px;}
+.cal-head{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:12px;}
+.cal-title{font-family:'Newsreader',serif;font-size:22px;min-width:200px;text-align:center;}
+.cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;grid-auto-rows:88px;}
+.cal-dow{text-align:center;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);}
+.cal-cell{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px;cursor:pointer;display:flex;flex-direction:column;gap:3px;overflow:hidden;}
+.cal-cell.empty{background:none;border:none;cursor:default;}
+.cal-cell:hover:not(.empty){border-color:var(--brass-dim);}
+.cal-num{font-size:11px;color:var(--muted);}
+.cal-chip{text-align:left;font-size:9.5px;border:none;border-radius:4px;padding:2px 4px;cursor:pointer;color:var(--text);background:#2A313E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'IBM Plex Mono',monospace;}
+.cal-chip.s-scheduled{background:#3a3320;color:var(--brass);}
+.cal-chip.s-posted{background:#22301f;color:var(--sage);}
+.cal-more{font-size:9px;color:var(--muted);}
+.plan-key{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:20px;}
+.wh-check{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--muted);margin-top:8px;cursor:pointer;}
+.wh-check input{margin-top:2px;accent-color:var(--brass);}
+.limit-note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin:6px 0 2px;}
+.limit-checks{margin-top:10px;display:flex;flex-direction:column;gap:4px;}
+.limit-row{font-size:12px;color:var(--sage);}
+.limit-row.bad{color:#C77;}
+.pi-viol{font-size:12px;color:#C77;margin-bottom:8px;line-height:1.5;}
+.plan-list{display:flex;flex-direction:column;gap:10px;}
+.plan-item{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;}
+.pi-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.pi-date{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+.pi-status{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+.pi-status.s-scheduled{color:var(--brass);}
+.pi-status.s-posted{color:var(--sage);}
+.pi-cap{font-size:13.5px;line-height:1.5;margin-bottom:6px;}
+.pi-plats{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--brass-dim);margin-bottom:10px;}
+.pi-actions{display:flex;gap:7px;flex-wrap:wrap;}
+.modal-back{position:fixed;inset:0;background:rgba(8,10,14,.72);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;width:100%;max-width:520px;max-height:90vh;overflow:auto;}
+.plat-row{display:flex;gap:6px;flex-wrap:wrap;}
+.two-col{display:flex;gap:12px;}
+.two-col>div{flex:1;}
+.modal-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 8px;align-items:flex-start;}
+.modal-thumbs img{width:52px;height:65px;object-fit:cover;border-radius:5px;border:1px solid var(--line);display:block;}
+.mt-wrap{display:flex;flex-direction:column;align-items:center;gap:3px;}
+.mt-btns{display:flex;gap:2px;}
+.mt-btns button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:4px;font-size:11px;width:18px;height:18px;line-height:1;cursor:pointer;padding:0;}
+.mt-btns button:hover{color:var(--brass);border-color:var(--brass-dim);}
+.mt-btns button:disabled{opacity:.3;cursor:default;}
+.mt-add{width:52px;height:65px;border:1px dashed var(--line);background:none;color:var(--muted);border-radius:5px;cursor:pointer;font-size:12px;}
+.mt-add:hover{border-color:var(--brass);color:var(--brass);}
 
 .grid{display:grid;grid-template-columns:340px 1fr;gap:24px;align-items:start;}
 @media(max-width:820px){.grid{grid-template-columns:1fr;}}
@@ -835,7 +2475,8 @@ const css = `
 .tone:hover{color:var(--text);}
 .tone.on{border-color:var(--brass);color:var(--brass);background:#20262F;}
 
-.themes{display:flex;gap:6px;}
+.layouts{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.themes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
 .theme-btn{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 4px 7px;cursor:pointer;transition:.15s;display:flex;flex-direction:column;align-items:center;gap:6px;}
 .theme-btn:hover{border-color:var(--brass-dim);}
 .theme-btn.on{border-color:var(--brass);background:#20262F;}
@@ -879,6 +2520,7 @@ const css = `
 
 .proof-carousel{margin-top:16px;}
 .thumbs-label{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.18em;color:var(--brass-dim);margin-bottom:9px;}
+.img-status{color:var(--brass);}
 .thumbs{display:flex;gap:8px;flex-wrap:wrap;}
 .thumb{padding:0;border:1px solid var(--paper-line);background:none;border-radius:8px;overflow:hidden;cursor:pointer;line-height:0;transition:.15s;}
 .thumb:hover{border-color:var(--brass);transform:translateY(-2px);}
@@ -900,12 +2542,7 @@ const css = `
 .dot{width:7px;height:7px;border-radius:50%;background:var(--line);border:none;cursor:pointer;padding:0;}
 .dot.on{background:var(--brass);}
 
-.img-overlay-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 4px;justify-content:center;}
-.img-btn{font-size:12px;padding:7px 13px;}
-.img-hint{font-size:11px;color:var(--muted);flex:none;}
-.themes{display:flex;gap:6px;flex-wrap:wrap;}
-.theme-btn{min-width:44px;flex:1;}
-
+.compliance{margin-top:22px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;}
 .comp-head{display:flex;justify-content:space-between;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;color:var(--brass);text-transform:uppercase;margin-bottom:12px;}
 .disc-edit{background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;font-size:11px;padding:4px 9px;cursor:pointer;font-family:inherit;letter-spacing:0;text-transform:none;}
 .disc-box{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);font-family:inherit;font-size:12.5px;padding:9px;margin-bottom:12px;resize:vertical;}
@@ -924,7 +2561,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<ContentDesk />);
     </script>
 
     <script>
-      window.addEventListener('load', function () {
+      (function () {
         try {
           var raw = document.getElementById("app-source").textContent;
           // Classic runtime => React.createElement, so the output has no imports.
@@ -938,7 +2575,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<ContentDesk />);
             "The Desk failed to start:\n\n" + (e && e.message ? e.message : e) + "</pre>";
           console.error(e);
         }
-      });
+      })();
     </script>
   </body>
 </html>
