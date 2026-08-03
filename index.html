@@ -89,13 +89,59 @@ const IMAGE_SOURCES = [
   { id: "openai", label: "OpenAI", note: "Paid AI images, about 4 to 8 cents each." },
 ];
 
-// Who writes the post text. Two of these are free.
+// Who writes the post text. Three of these are free, and the app falls back
+// between them automatically when a free allowance runs out.
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.3-70b-versatile";
-const TEXT_SOURCES = [
-  { id: "openai", label: "OpenAI", note: "Uses your OpenAI key and the model below." },
-  { id: "groq", label: "Groq", note: "Free alternative. Needs a free Groq key (console.groq.com, no credit card)." },
+// Groq meters each model separately, so one spent model does not mean a spent
+// key. Tried in order, best writer first.
+const GROQ_MODELS = [
+  "llama-3.3-70b-versatile",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "llama-3.1-8b-instant",
 ];
+
+// Google AI Studio. The free tier needs no card, and these are strong writers.
+const GEMINI_ENDPOINT = (model) =>
+  "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent";
+// "latest" aliases first so this keeps working as Google ships new versions,
+// then named fallbacks, then the lighter models whose free limits are roomier.
+const GEMINI_MODELS = [
+  "gemini-flash-latest",
+  "gemini-3.5-flash",
+  "gemini-2.5-flash",
+  "gemini-flash-lite-latest",
+  "gemini-2.5-flash-lite",
+];
+
+// OpenRouter publishes which models are free right now, so the app reads that
+// list instead of hardcoding names that go stale.
+const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models";
+// Not general prose writers: safety classifiers, code models, vision, audio.
+const OR_SKIP = /safety|guard|moderat|code|coder|embed|vision|-vl\b|vl-|tts|whisper|ocr|image/i;
+// Families that write clean prose, best first. Anything else still qualifies,
+// it just sorts after these.
+const OR_PREFER = ["nemotron-3-ultra", "gemma-4", "nemotron-3-super", "gpt-oss", "llama", "deepseek", "qwen", "mistral", "ling"];
+
+const TEXT_SOURCES = [
+  { id: "groq", label: "Groq", note: "Free, no credit card. Key at console.groq.com. Falls back to your other free writers if it runs out." },
+  { id: "gemini", label: "Gemini", note: "Free tier, no credit card. Key at aistudio.google.com. Google's free allowance is generous and the writing is strong." },
+  { id: "openrouter", label: "OpenRouter", note: "Free, no credit card. Key at openrouter.ai. Picks from whichever models are free right now." },
+  { id: "openai", label: "OpenAI", note: "Paid. Uses your OpenAI key and the model below." },
+];
+// The order the app falls back through when a free writer is out of requests.
+const FREE_WRITERS = ["groq", "gemini", "openrouter"];
+const WRITER_LABEL = (id) => (TEXT_SOURCES.find((s) => s.id === id) || {}).label || id;
+
+// "Out of free requests" as opposed to "your key is wrong". Only the first is
+// worth failing over for.
+function isLimitError(e) {
+  return /\b429\b|rate limit|quota|exhausted|out of (free )?requests|too many requests|capacity/i.test(String((e && e.message) || ""));
+}
+function isKeyError(e) {
+  return /\b401\b|\b403\b|key rejected|api key not valid|no key|add your/i.test(String((e && e.message) || ""));
+}
 
 // Whether to generate a real photo behind each slide (OpenAI image API).
 // "off" keeps the clean color slides; "cover" illustrates only slide 1
@@ -2224,7 +2270,14 @@ function ContentDesk() {
   const [editDisc, setEditDisc] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
   const [modelId, setModelId] = useState("gpt-4o-mini");
-  const [textSource, setTextSource] = useState("openai");
+  // Remembered between visits, and free by default.
+  const [textSource, setTextSource] = useState(() => {
+    try { return localStorage.getItem("writer") || "groq"; } catch (e) { return "groq"; }
+  });
+  function saveWriter(v) {
+    setTextSource(v);
+    try { localStorage.setItem("writer", v); } catch (e) {}
+  }
   const [photoMode, setPhotoMode] = useState("cover");
   const [imageSource, setImageSource] = useState("pollinations");
   const [slideImages, setSlideImages] = useState({});
@@ -2251,6 +2304,24 @@ function ContentDesk() {
     setGroqKey(v);
     try { localStorage.setItem("groq_api_key", v); } catch (e) {}
   }
+  const [geminiKey, setGeminiKey] = useState(() => {
+    try { return localStorage.getItem("gemini_api_key") || ""; } catch (e) { return ""; }
+  });
+  function saveGemini(v) {
+    setGeminiKey(v);
+    try { localStorage.setItem("gemini_api_key", v); } catch (e) {}
+  }
+  const [orKey, setOrKey] = useState(() => {
+    try { return localStorage.getItem("openrouter_api_key") || ""; } catch (e) { return ""; }
+  });
+  function saveOr(v) {
+    setOrKey(v);
+    try { localStorage.setItem("openrouter_api_key", v); } catch (e) {}
+  }
+  // Which writers have a key, so failover only tries ones that can work.
+  const writerKeys = { groq: groqKey, gemini: geminiKey, openrouter: orKey, openai: apiKey };
+  const [writerNote, setWriterNote] = useState("");
+  const orModelsRef = useRef([]); // cached list of currently free OpenRouter models
   const canvasRef = useRef(null);
   const recentRef = useRef([]); // last few hooks/topics, to push the model off repeats
   const lastTplRef = useRef("editorial"); // last layout used, so "Surprise" can avoid repeats
@@ -2372,7 +2443,7 @@ function ContentDesk() {
   ];
 
   async function generate() {
-    setLoading(true); setError(""); setResult(null); setSlide(0); setView("post");
+    setLoading(true); setError(""); setWriterNote(""); setResult(null); setSlide(0); setView("post");
     setSlideImages({}); setImgStatus("");
     // Resolve the layout. "Surprise" rolls a random one, avoiding a repeat.
     let layout = templateId;
@@ -2410,23 +2481,47 @@ function ContentDesk() {
         : `No topic given, choose a fresh interesting one yourself. Generate the ${pillar.label} post and carousel.`;
       const userMsg = `${base}\n\n${spin} Make this draft distinctly different from anything generic. Variation token: ${nonce}.${avoid}`;
       const system = buildSystemPrompt(pillar, tone, LEN_WORDS[lenIdx], LEN_LABELS[lenIdx], slideCount);
-      // Draft from the chosen writer, then parse its JSON.
-      const draftOnce = async () => {
-        const raw = textSource === "groq" ? await groqDraft(system, userMsg) : await openaiDraft(system, userMsg);
+      // Draft from a given writer, then parse its JSON.
+      const draftOnce = async (writer) => {
+        const raw = await draftWith(writer, system, userMsg);
         const cleaned = raw.replace(/```json|```/g, "").trim();
         return cleanResult(JSON.parse(cleaned.slice(cleaned.indexOf("{"), cleaned.lastIndexOf("}") + 1)));
       };
-      // Retry occasional malformed JSON from the free writer. Never retry key errors.
-      const attempts = textSource === "openai" ? 1 : 3;
-      let parsed = null, lastErr = null;
-      for (let a = 0; a < attempts; a++) {
-        try { parsed = await draftOnce(); break; }
-        catch (e) {
-          lastErr = e;
-          if (/key|401|403/i.test((e && e.message) || "")) throw e;
+      // Start with the chosen writer, then fall back through the other free
+      // writers you have keys for, so one spent allowance is not a dead end.
+      const chain = [textSource].concat(
+        FREE_WRITERS.filter((id) => id !== textSource && writerKeys[id] && writerKeys[id].trim())
+      );
+      let parsed = null, lastErr = null, usedWriter = textSource, ranOut = [];
+      for (const writer of chain) {
+        // Retry occasional malformed JSON from a free writer. A key or limit
+        // problem is not worth retrying: move to the next writer instead.
+        const attempts = writer === "openai" ? 1 : 3;
+        for (let a = 0; a < attempts; a++) {
+          try { parsed = await draftOnce(writer); usedWriter = writer; break; }
+          catch (e) {
+            lastErr = e;
+            if (isKeyError(e) || isLimitError(e)) break;
+          }
         }
+        if (parsed) break;
+        if (isLimitError(lastErr)) ranOut.push(WRITER_LABEL(writer));
+        // A key problem on the writer you actually picked is worth saying out
+        // loud rather than silently borrowing another writer's key.
+        if (writer === textSource && isKeyError(lastErr) && chain.length === 1) throw lastErr;
       }
-      if (!parsed) throw new Error((lastErr && lastErr.message) ? ("Draft failed after retries: " + lastErr.message) : "That draft did not come through cleanly. Try Generate again.");
+      if (!parsed) {
+        // If every free writer is spent, say so plainly instead of reporting
+        // only whichever one happened to be last in the chain.
+        if (ranOut.length > 1) {
+          throw new Error(ranOut.join(", ") + " are all out of free requests right now. They reset on their own, so try again later, add a key for another free writer, or switch to OpenAI.");
+        }
+        throw new Error((lastErr && lastErr.message) ? ("Draft failed: " + lastErr.message) : "That draft did not come through cleanly. Try Generate again.");
+      }
+      setWriterNote(usedWriter === textSource ? "" :
+        ranOut.length
+          ? ranOut.join(" and ") + " ran out of free requests, so " + WRITER_LABEL(usedWriter) + " wrote this one."
+          : WRITER_LABEL(textSource) + " could not write this one, so " + WRITER_LABEL(usedWriter) + " stepped in.");
       setResult(parsed);
       // remember this hook so the next Generate avoids it
       recentRef.current = [parsed.hook, ...recentRef.current].filter(Boolean).slice(0, 10);
@@ -2443,7 +2538,7 @@ function ContentDesk() {
   // string the model produced. -------------------------------------------------
   async function openaiDraft(system, user) {
     const key = apiKey.trim();
-    if (!key) throw new Error("Add your OpenAI API key to write with OpenAI, or switch Writer to Free.");
+    if (!key) throw new Error("Add your OpenAI API key to write with OpenAI, or switch Writer to a free one.");
     const r = await fetch(OPENAI_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
@@ -2464,23 +2559,125 @@ function ContentDesk() {
 
   async function groqDraft(system, user) {
     const key = groqKey.trim();
-    if (!key) throw new Error("Add your free Groq API key (console.groq.com) to write with Groq, or switch Writer to Free.");
-    const r = await fetch(GROQ_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-      body: JSON.stringify({
-        model: GROQ_MODEL, temperature: 1.0, top_p: 0.95, max_tokens: 2048,
-        response_format: { type: "json_object" },
-        messages: [{ role: "system", content: system }, { role: "user", content: user }],
-      }),
-    });
-    if (!r.ok) {
+    if (!key) throw new Error("Add your free Groq API key (console.groq.com) to write with Groq.");
+    let spent = 0, lastMsg = "";
+    for (const model of GROQ_MODELS) {
+      const r = await fetch(GROQ_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+        body: JSON.stringify({
+          model, temperature: 1.0, top_p: 0.95, max_tokens: 2048,
+          response_format: { type: "json_object" },
+          messages: [{ role: "system", content: system }, { role: "user", content: user }],
+        }),
+      });
+      if (r.ok) return (await r.json()).choices?.[0]?.message?.content || "";
       let d = ""; try { d = (await r.json())?.error?.message || ""; } catch (e) {}
+      lastMsg = d;
       if (r.status === 401) throw new Error("Groq key rejected (401). Check the key.");
-      if (r.status === 429) throw new Error("Groq rate limit (429). Wait a moment and try again. " + d);
+      // A spent or missing model just means try the next one on the list.
+      if (r.status === 429 || r.status === 404 || r.status === 400) { spent += 1; continue; }
       throw new Error("Groq error " + r.status + ". " + d);
     }
-    return (await r.json()).choices?.[0]?.message?.content || "";
+    throw new Error("Groq is out of free requests on every model right now (429). " + lastMsg);
+  }
+
+  async function geminiDraft(system, user) {
+    const key = geminiKey.trim();
+    if (!key) throw new Error("Add your free Google AI Studio key (aistudio.google.com) to write with Gemini.");
+    let lastMsg = "", limited = false;
+    for (const model of GEMINI_MODELS) {
+      const r = await fetch(GEMINI_ENDPOINT(model), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts: [{ text: user }] }],
+          generationConfig: { temperature: 1.0, topP: 0.95, maxOutputTokens: 4096, responseMimeType: "application/json" },
+        }),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
+        if (text) return text;
+        lastMsg = "Gemini returned an empty draft" + (j.promptFeedback?.blockReason ? " (" + j.promptFeedback.blockReason + ")" : "") + ".";
+        continue;
+      }
+      let d = ""; try { d = (await r.json())?.error?.message || ""; } catch (e) {}
+      lastMsg = d;
+      if (r.status === 400 && /api key not valid/i.test(d)) throw new Error("Gemini key rejected. Check the key.");
+      if (r.status === 401 || r.status === 403) throw new Error("Gemini key rejected (" + r.status + "). " + d);
+      // Spent free allowance, or a model name this key cannot reach: try next.
+      if (r.status === 429) { limited = true; continue; }
+      if (r.status === 404 || r.status === 400) continue;
+      throw new Error("Gemini error " + r.status + ". " + d);
+    }
+    throw new Error(limited
+      ? "Gemini free allowance is used up for now (429). " + lastMsg
+      : "Gemini could not draft this one. " + lastMsg);
+  }
+
+  // Ask OpenRouter which models are free at this moment, best writers first.
+  async function openrouterFreeModels() {
+    if (orModelsRef.current.length) return orModelsRef.current;
+    const r = await fetch(OPENROUTER_MODELS_ENDPOINT);
+    if (!r.ok) throw new Error("Could not read the OpenRouter model list (" + r.status + ").");
+    const all = ((await r.json()).data || []).filter((m) => String(m.id).endsWith(":free") && !OR_SKIP.test(m.id));
+    const rank = (m) => {
+      const hit = OR_PREFER.findIndex((p) => m.id.includes(p));
+      return hit === -1 ? OR_PREFER.length : hit;
+    };
+    all.sort((a, b) => rank(a) - rank(b) || (b.context_length || 0) - (a.context_length || 0));
+    orModelsRef.current = all.map((m) => m.id).slice(0, 6);
+    return orModelsRef.current;
+  }
+
+  async function openrouterDraft(system, user) {
+    const key = orKey.trim();
+    if (!key) throw new Error("Add your free OpenRouter key (openrouter.ai) to write with OpenRouter.");
+    const models = await openrouterFreeModels();
+    if (!models.length) throw new Error("OpenRouter has no free writing models listed right now.");
+    let lastMsg = "", limited = false;
+    for (const model of models) {
+      const r = await fetch(OPENROUTER_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + key,
+          "HTTP-Referer": location.origin || "https://thedesk.local",
+          "X-Title": "The Desk",
+        },
+        body: JSON.stringify({
+          model, temperature: 1.0, top_p: 0.95, max_tokens: 2048,
+          messages: [{ role: "system", content: system }, { role: "user", content: user }],
+        }),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const text = j.choices?.[0]?.message?.content || "";
+        if (text) return text;
+        lastMsg = "empty draft from " + model;
+        continue;
+      }
+      let d = ""; try { d = (await r.json())?.error?.message || ""; } catch (e) {}
+      lastMsg = d;
+      if (r.status === 401) throw new Error("OpenRouter key rejected (401). Check the key.");
+      if (r.status === 429) { limited = true; continue; }
+      if (r.status === 402) { limited = true; continue; }
+      if (r.status === 404 || r.status === 400) continue;
+      throw new Error("OpenRouter error " + r.status + ". " + d);
+    }
+    throw new Error(limited
+      ? "OpenRouter free models are rate limited right now (429). " + lastMsg
+      : "OpenRouter could not draft this one. " + lastMsg);
+  }
+
+  // Route to whichever writer is being tried.
+  function draftWith(writer, system, user) {
+    if (writer === "groq") return groqDraft(system, user);
+    if (writer === "gemini") return geminiDraft(system, user);
+    if (writer === "openrouter") return openrouterDraft(system, user);
+    return openaiDraft(system, user);
   }
 
   // Fetch one photo per targeted slide from the chosen source, load it as a
@@ -2709,7 +2906,7 @@ function ContentDesk() {
           <div className="ctrl-label">Writer <span className="opt">who writes the text</span></div>
           <div className="tones">
             {TEXT_SOURCES.map((m) => (
-              <button key={m.id} className={"tone" + (m.id === textSource ? " on" : "")} onClick={() => setTextSource(m.id)}>{m.label}</button>
+              <button key={m.id} className={"tone" + (m.id === textSource ? " on" : "")} onClick={() => saveWriter(m.id)}>{m.label}</button>
             ))}
           </div>
           <div className="slider-note">{(TEXT_SOURCES.find((s) => s.id === textSource) || {}).note}</div>
@@ -2717,6 +2914,26 @@ function ContentDesk() {
             <input className="topic mt8" type="password" value={groqKey} autoComplete="off"
               onChange={(e) => saveGroq(e.target.value)} placeholder="Groq API key (free at console.groq.com)" />
           )}
+          {textSource === "gemini" && (
+            <input className="topic mt8" type="password" value={geminiKey} autoComplete="off"
+              onChange={(e) => saveGemini(e.target.value)} placeholder="Google AI Studio key (free at aistudio.google.com)" />
+          )}
+          {textSource === "openrouter" && (
+            <input className="topic mt8" type="password" value={orKey} autoComplete="off"
+              onChange={(e) => saveOr(e.target.value)} placeholder="OpenRouter key (free at openrouter.ai)" />
+          )}
+          {/* Backup keys. Paste more than one and a spent allowance stops being a dead end. */}
+          <div className="ctrl-label">Backup writers <span className="opt">optional</span></div>
+          <div className="slider-note">
+            Paste a key for more than one free writer. If the one you picked runs out mid-generate,
+            the app quietly switches to another and tells you which one wrote it.
+          </div>
+          {FREE_WRITERS.filter((id) => id !== textSource).map((id) => (
+            <input key={id} className="topic mt8" type="password" autoComplete="off"
+              value={writerKeys[id]}
+              onChange={(e) => (id === "groq" ? saveGroq : id === "gemini" ? saveGemini : saveOr)(e.target.value)}
+              placeholder={WRITER_LABEL(id) + " key" + (writerKeys[id] ? " (saved)" : " (optional backup)")} />
+          ))}
 
           {(textSource === "openai" || imageSource === "openai") && (
             <>
@@ -2883,6 +3100,10 @@ function ContentDesk() {
           )}
           {loading && (<div className="empty"><div className="empty-mark spin">&#9716;</div><p>Setting the type...</p></div>)}
           {error && (<div className="empty err"><div className="empty-mark">!</div><p>{error}</p></div>)}
+
+          {result && writerNote && (
+            <div className="slider-note" style={{ marginBottom: 12 }}>{writerNote}</div>
+          )}
 
           {result && (
             <>
