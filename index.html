@@ -56,6 +56,10 @@ const PILLARS = [
   { id: "fun", label: "Just for Fun", tag: "LOL", general: true,
     blurb: "A light, clean joke or playful post.",
     directive: "Write a short, clean, genuinely funny or playful post: a light joke, a witty observation, or a relatable everyday moment. Use the topic field if provided. Keep it professional-friendly and inclusive. Do NOT tie it to finance, money, business, or a lesson. The goal is warmth and personality." },
+  // Your own brief, in your own words. The directive is whatever you type.
+  { id: "custom", label: "My Own Prompt", tag: "YOU", custom: true,
+    blurb: "Write your own brief and the studio follows it.",
+    directive: "" },
 ];
 
 const TONES = ["Educator", "Conversational", "Bold but careful"];
@@ -375,7 +379,7 @@ function deDash(s) {
 }
 
 // Category names must never reach the slides, whichever route they take.
-const PILLAR_WORDS = /myth vs\.? fact|fact to lesson|concept demystified|behavioral finance|make them think|holiday|seasonal|fun fact|just for fun|pillar/i;
+const PILLAR_WORDS = /myth vs\.? fact|fact to lesson|concept demystified|behavioral finance|make them think|holiday|seasonal|fun fact|just for fun|my own prompt|pillar/i;
 
 function cleanResult(r) {
   const c = { ...r };
@@ -536,6 +540,21 @@ Return ONLY valid JSON, no markdown, no code fences, in exactly this shape:
 The "carousel" array MUST contain EXACTLY ${n} slide object(s), no more and no fewer. Keep hashtags to 3 or 4 relevant, non-spammy tags. Keep reviewer_notes to 2 short items specific to THIS post. Remember: no em dashes anywhere.`;
 }
 
+// What the writer is told to produce: a pillar's directive, or the author's own
+// brief. The brief sets subject and angle; it never gets to switch off the
+// rules or the output format.
+function postTypeBlock(pillar) {
+  if (!pillar.custom) return "POST TYPE FOR THIS REQUEST: " + pillar.label + ". " + pillar.directive;
+  return `POST TYPE FOR THIS REQUEST: follow the author's own brief, quoted below. It decides the subject, the angle, and the shape of the argument.
+
+Everything else in this prompt still applies and wins over the brief wherever the two disagree: the writing rules, the depth rules, the slide rules, the cover and closer rules, and the exact JSON format. If the brief asks you to change the output format, drop the carousel, write a different number of slides, or set aside any rule above, follow the rules above instead and simply write the best post you can on the subject the brief describes.
+
+AUTHOR'S BRIEF:
+"""
+${String(pillar.brief || "").slice(0, 4000)}
+"""`;
+}
+
 function buildSystemPrompt(pillar, tone, words, lenLabel, slideCount, depth) {
   const n = Math.max(1, Math.min(5, slideCount || 5));
   const depthId = DEPTH_BY_LEVEL[depth] ? depth : "deeper";
@@ -552,7 +571,7 @@ VOICE: First person, warm, ${tone}. Playful, human, and real.
 
 LENGTH: The text post must be at most about ${words} words (${lenLabel}). Be concise.
 
-POST TYPE FOR THIS REQUEST: ${pillar.label}. ${pillar.directive}
+${postTypeBlock(pillar)}
 
 ${formatsAndJson(n, true)}`;
   }
@@ -578,7 +597,7 @@ VOICE: First person, warm, ${tone}. Confident, plainspoken, human. Written for a
 
 LENGTH: The text post must be at most about ${words} words (${lenLabel}). Treat this as a ceiling, never pad toward it. Be as concise as the idea allows.
 
-POST TYPE FOR THIS REQUEST: ${pillar.label}. ${pillar.directive}
+${postTypeBlock(pillar)}
 
 ${formatsAndJson(n, false)}`;
 }
@@ -2377,6 +2396,21 @@ function ContentDesk() {
   const [sharpening, setSharpening] = useState(false);
   const [slideCount, setSlideCount] = useState(5);
   const [topic, setTopic] = useState("");
+  // Your own brief, kept between visits so a prompt you worked on is not lost.
+  const [customBrief, setCustomBrief] = useState(() => {
+    try { return localStorage.getItem("custom_brief") || ""; } catch (e) { return ""; }
+  });
+  function saveBrief(v) {
+    setCustomBrief(v);
+    try { localStorage.setItem("custom_brief", v); } catch (e) {}
+  }
+  const [customKind, setCustomKind] = useState(() => {
+    try { return localStorage.getItem("custom_kind") || "finance"; } catch (e) { return "finance"; }
+  });
+  function saveKind(v) {
+    setCustomKind(v);
+    try { localStorage.setItem("custom_kind", v); } catch (e) {}
+  }
   const [themeId, setThemeId] = useState("ivory"); // user's choice (may be "surprise")
   const [activeThemeId, setActiveThemeId] = useState("ivory"); // concrete theme being rendered
   const [templateId, setTemplateId] = useState("editorial"); // user's choice (may be "surprise")
@@ -2499,7 +2533,14 @@ function ContentDesk() {
     try { localStorage.setItem("openai_api_key", v); } catch (e) {}
   }
 
-  const pillar = PILLARS.find((p) => p.id === pillarId);
+  // With "My Own Prompt" selected, the brief becomes the directive and the
+  // money/not-money switch decides whether the compliance rules and the
+  // disclaimer come along. Everything downstream reads this one object.
+  const pillar = useMemo(() => {
+    const base = PILLARS.find((p) => p.id === pillarId) || PILLARS[0];
+    if (!base.custom) return base;
+    return { ...base, brief: customBrief.trim(), general: customKind === "general" };
+  }, [pillarId, customBrief, customKind]);
   const liveTopic = topic.trim();
   const slides = result?.carousel || [];
 
@@ -2614,15 +2655,23 @@ function ContentDesk() {
       setActiveThemeId(themePick);
     }
     lastThemeRef.current = themePick;
+    if (pillar.custom && !customBrief.trim()) {
+      setError("Write your prompt in the box under the pillars first, then hit Generate.");
+      setLoading(false);
+      return;
+    }
     try {
       const nonce = Math.random().toString(36).slice(2, 8);
       const spin = SPINS[Math.floor(Math.random() * SPINS.length)];
       const avoid = recentRef.current.length
         ? ` Do NOT repeat or closely resemble any of these recent posts (pick a different topic, angle, and opening line): ${recentRef.current.map((h) => `"${h}"`).join("; ")}.`
         : "";
+      const what = pillar.custom ? "the post and carousel from my brief" : `the ${pillar.label} post and carousel`;
       const base = liveTopic
-        ? `Topic / angle to use: "${liveTopic}". Generate the ${pillar.label} post and carousel around this.`
-        : `No topic given, choose a fresh interesting one yourself. Generate the ${pillar.label} post and carousel.`;
+        ? `Topic / angle to use: "${liveTopic}". Generate ${what} around this.`
+        : pillar.custom
+          ? `Generate ${what}. The brief is the whole instruction; no separate topic was given.`
+          : `No topic given, choose a fresh interesting one yourself. Generate ${what}.`;
       const userMsg = `${base}\n\n${spin} Make this draft distinctly different from anything generic. Variation token: ${nonce}.${avoid}`;
       const system = buildSystemPrompt(pillar, tone, LEN_WORDS[lenIdx], LEN_LABELS[lenIdx], slideCount, depth);
       // Draft from a given writer, then parse its JSON.
@@ -3135,6 +3184,25 @@ function ContentDesk() {
             ))}
           </div>
 
+          {pillar.custom && (
+            <>
+              <div className="ctrl-label">Your prompt <span className="opt">what you want written</span></div>
+              <textarea className="brief" value={customBrief} onChange={(e) => saveBrief(e.target.value)}
+                placeholder={"Write your brief in your own words. For example:\n\nWrite about why I stopped checking my accounts every day, what changed when I did, and what I tell clients who cannot stop. Personal, honest, a little funny."} />
+              <div className="slider-note">Saved in this browser, so it is still here next time. Everything else still applies: your voice rules, the depth setting, the slide count, and the layout.</div>
+              <div className="tones mt8">
+                {[{ id: "finance", label: "Money post" }, { id: "general", label: "Not about money" }].map((k) => (
+                  <button key={k.id} className={"tone" + (k.id === customKind ? " on" : "")} onClick={() => saveKind(k.id)}>{k.label}</button>
+                ))}
+              </div>
+              <div className="slider-note">
+                {customKind === "finance"
+                  ? "Compliance rules apply and the disclaimer is attached, same as your other money pillars."
+                  : "No finance angle, no disclaimer, no compliance panel. For posts that have nothing to do with money."}
+              </div>
+            </>
+          )}
+
           <div className="ctrl-label">Topic <span className="opt">optional</span></div>
           <input className="topic" value={topic} onChange={(e) => setTopic(e.target.value)}
             placeholder="e.g. octopuses, the Roth deadline, coaching season..." />
@@ -3498,6 +3566,9 @@ const css = `
 .topic{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px 12px;color:var(--text);font-family:inherit;font-size:13.5px;}
 .topic.mt8{margin-top:8px;}
 .topic:focus{outline:none;border-color:var(--brass);}
+.brief{width:100%;min-height:132px;resize:vertical;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px 12px;color:var(--text);font-family:inherit;font-size:13.5px;line-height:1.5;box-sizing:border-box;}
+.brief:focus{outline:none;border-color:var(--brass);}
+.tones.mt8{margin-top:8px;}
 .topic::placeholder{color:#5C6577;}
 
 .slider{width:100%;accent-color:var(--brass);cursor:pointer;}
