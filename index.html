@@ -374,8 +374,13 @@ function deDash(s) {
     .replace(/,\s*$/g, "");
 }
 
+// Category names must never reach the slides, whichever route they take.
+const PILLAR_WORDS = /myth vs\.? fact|fact to lesson|concept demystified|behavioral finance|make them think|holiday|seasonal|fun fact|just for fun|pillar/i;
+
 function cleanResult(r) {
   const c = { ...r };
+  c.kicker = deDash(c.kicker);
+  if (PILLAR_WORDS.test(String(c.kicker || ""))) c.kicker = "";
   c.hook = deDash(c.hook);
   c.body = deDash(c.body);
   if (Array.isArray(c.carousel)) {
@@ -407,6 +412,88 @@ function carouselSpec(n) {
   return "a " + n + " slide carousel. Slide 1 is the COVER (a bold title that makes a complete statement, up to about 12 words, plus a one-sentence summary of what the carousel delivers). Slides 2 to " + (n - 1) + " each carry ONE headline that is a COMPLETE THOUGHT, a full statement of up to about 12 words, never a fragment or teaser, plus a supporting subtext of 1 or 2 full sentences (up to about 28 words) that finishes the idea. Each slide must make sense on its own without the caption. Slide " + n + " is the CLOSER (see the CLOSER RULE).";
 }
 
+// How far past the obvious the writer has to push. This is the difference
+// between a post that states something true and one that changes how the reader
+// sees it.
+const DEPTH_LEVELS = [
+  { id: "everyday", label: "Everyday", note: "Plain and friendly. Explains itself to someone with no finance background." },
+  { id: "deeper", label: "Deeper", note: "Names the real concept and explains the mechanism underneath it. The default." },
+  { id: "expert", label: "Expert", note: "Assumes a financially literate reader. Second order effects and the cases where the usual advice is wrong." },
+];
+
+// Applies to every depth level: the failure mode to avoid.
+const DEPTH_CORE = `DEPTH. After compliance, this is the most important instruction.
+
+A shallow post states something the reader already believes. A deep post changes
+how they see it. Before you write, take your idea through three steps:
+  1. The obvious version, the sentence almost anyone would write.
+  2. WHY it is true: the actual mechanism, the arithmetic, the rule, the incentive,
+     or the specific human behavior underneath it.
+  3. What follows from that: the exception, the tradeoff, the threshold where it
+     stops being true, the second order effect, or the decision it should change.
+Write from steps 2 and 3. Step 1 may appear as the setup, never as the payoff.
+
+Go DEEP on one idea instead of listing three. A post that fully explains one
+mechanism beats a post that name-drops several.
+
+NEVER let the takeaway of the post be one of these worn-out lines. They are
+allowed only as the setup you then complicate or contradict:
+"start early", "time in the market beats timing the market", "pay yourself first",
+"spend less than you earn", "diversification reduces risk", "have an emergency fund",
+"compound interest is powerful", "invest for the long term", "stay the course",
+"money can't buy happiness", "budgeting is important", "small habits add up".
+If your draft lands on one of those, you stopped at step 1. Rewrite it so the
+takeaway is the mechanism, the number, the exception, or the tradeoff.
+
+BE SPECIFIC. Every post needs at least one hard anchor: a named concept, a real
+threshold or timeframe, a concrete everyday scenario, or an actual mechanism
+described in plain words. "Various factors", "significant impact", "a lot" and
+"many people" are failures. If you use a figure that changes from year to year,
+such as a contribution limit or a tax bracket, name the year it applies to and
+add it to reviewer_notes as something to verify.`;
+
+const DEPTH_BY_LEVEL = {
+  everyday: `DEPTH LEVEL: Everyday. Explain so a smart friend with no finance background follows it on the first read. Still go past the obvious and still give the mechanism, but define anything technical in the same sentence you use it, and keep the scenario domestic and familiar. No jargon left unexplained.`,
+  deeper: `DEPTH LEVEL: Deeper. Name the actual concept where one exists (sequence of returns risk, loss aversion, the wash sale rule, dollar cost averaging, tax drag, mental accounting) and explain the mechanism in plain words. Include at least one exception or tradeoff, the place where the usual advice does not hold. Naming the real thing is what separates an advisor from a motivational account.`,
+  expert: `DEPTH LEVEL: Expert. Assume a financially literate reader who already knows the basics, and do not waste lines re-explaining them. Go to the second order effect: what the first order advice causes once everyone follows it, or what it costs somewhere else. Include the case where the standard advice is actively wrong, and say who it is wrong for. Name the concept, and the rule or account type where relevant. Precision over reassurance.`,
+};
+
+// Same idea for the non-finance pillars: surprising and explained, not a fact
+// everyone has already seen.
+const DEPTH_GENERAL = `DEPTH. Pick something genuinely surprising and less known, then explain WHY it is true in a line or two. The explanation is the post; a fact with no mechanism is a trivia card.
+
+Avoid the exhausted rotation of internet facts entirely: honey never spoils,
+bananas are berries, octopuses have three hearts, the Eiffel Tower grows in
+summer, wombat cubes, Cleopatra and the pyramids, a day on Venus, sharks and
+dinosaurs, hot water freezing faster. If your fact appears on the first page of
+"amazing facts" listicles, choose a different one.
+
+Prefer one properly explained thing over a list. Be specific: real names, real
+places, real numbers.`;
+
+// The carousel has to build, not repeat.
+// The sharpening pass. The draft goes back to the same writer wearing an
+// editor's hat, which is where most of the added depth actually comes from.
+function sharpenPrompt(draft, general) {
+  return `Here is a draft you wrote, as JSON:
+
+${JSON.stringify(draft)}
+
+Now switch roles. You are the toughest editor at a publication known for making smart readers feel smarter, and this draft is not finished. Interrogate it honestly:
+
+- Does the takeaway tell the reader something they did NOT already believe? If not, that is the thing to fix.
+- Is the mechanism actually explained, or merely asserted? Show why it is true.
+- Is there a specific anchor: a named concept, a real threshold, a concrete scenario? Vague quantities are failures.
+- Does every slide add something new, or do some restate the cover?
+- Is the hook a real hook, or a throat-clearing sentence before the real one? If the second line is stronger, promote it.
+- Is there a sentence doing no work? Cut it and spend the room on the mechanism.
+${general ? "- Is this fact genuinely lesser known, or one everybody has already seen? If it is tired, replace it with a better one." : "- Does it name the real concept an advisor would name, and hold to every compliance rule?"}
+
+Rewrite it properly. Keep whatever is already strong, and keep the SAME JSON shape, the SAME number of carousel slides, the same voice rules, the same cover and closer rules, and the same compliance rules you were given. Do not add commentary. Return ONLY the improved JSON object.`;
+}
+
+const SLIDE_PROGRESSION = `SLIDE PROGRESSION: the carousel must build an argument. The cover raises the real question, each middle slide adds something the slide before it did NOT contain (a mechanism, a number, an exception, a consequence), and the closer lands the payoff. No slide may restate the cover in different words. If two slides could swap places without losing anything, they are not doing enough work.`;
+
 const VOICE_RULES = `WRITE LIKE A REAL PERSON, NOT AI. These rules are strict:
 - No inflated verbs. Use "use" not "utilize" or "leverage", "help" not "facilitate", "start" not "commence". NEVER use these words: delve, foster, navigate, robust, myriad, tapestry, landscape, realm, testament.
 - No throat-clearing openers such as "It's worth noting", "It's important to remember", "In today's world", "At the end of the day". Say the thing directly.
@@ -427,14 +514,19 @@ function formatsAndJson(n, general) {
 1) A single LinkedIn text post: a strong scroll-stopping hook line, then short body lines, ending on a clear point. No hashtags in the body.
 2) A MINIMALIST image carousel: ${carouselSpec(n)} Every slide carries a complete thought written in real sentences, not clipped fragments like "The hidden cost" or "Why it matters". A reader who sees only that one slide should still learn something whole. Stay glanceable: a headline plus a sentence or two, never a paragraph.${n > 1 ? " The reader swipes the slides, then reads the full post caption for more." : ""}
 
+${SLIDE_PROGRESSION}
+
 COVER TITLE RULE: the cover slide's "title" must be a punchy, specific, curiosity-grabbing headline about the topic itself, like a magazine cover line. NEVER use the post category name (such as "Myth vs Fact", "Fact to Lesson", "Concept Demystified", "Behavioral Finance", "Fun Fact", "Holiday") as, or inside, any slide title or the hook. Write about the subject, not the format.
 
 CLOSER RULE: the final slide must stay on the CONTENT and close the loop in an interesting way. Best options: the single most memorable takeaway restated sharply, a surprising kicker detail that reframes the topic, or a thought-provoking question about the subject itself. It must NOT be a call to action or a pitch. NEVER write anything like "contact me", "DM me", "let's chat", "reach out", "message me", "follow for more", "link in bio", "let's talk", "work with me", or any invitation to hire, message, or follow the author. The closer is the topic's mic drop, not an ad.
 
 For EVERY slide, also write an "image_prompt": a vivid, literal description of a single photographic scene that represents that slide's specific idea (a concrete object, place, or moment, not an abstraction). It becomes a real photo shown behind the slide text, so describe only what is in frame. Each image_prompt must be clearly DIFFERENT from the others. The scene must contain NO people: no person, no faces, no hands, no human figures, no crowds. Use objects, places, architecture, nature, or still-life scenes instead. Do NOT mention any text, words, letters, numbers, charts, or logos in the image_prompt. Also write an "image_query": 2 to 4 plain search keywords for a stock photo of that same scene (for example "misty mountain lake" or "marble desk still life"), with no people and no punctuation.
 
+SECTION LABEL RULE: also write a "kicker", a 1 to 3 word section label for the top of the slides, in the style of a magazine section front: "CASH FLOW", "RETIREMENT MATH", "MARKET HISTORY", "TAX BASICS", "RISK". It must describe THIS post's subject. NEVER use the post category name (Myth vs Fact, Fact to Lesson, Concept Demystified, Behavioral Finance, Make Them Think, Holiday, Fun Fact, Just for Fun) and never use the words "pillar", "post", or "carousel".
+
 Return ONLY valid JSON, no markdown, no code fences, in exactly this shape:
 {
+  "kicker": "1 to 3 word section label about the subject",
   "hook": "the opening line of the text post",
   "body": "the rest of the text post, newline-separated, no hashtags",
   "hashtags": ["#Tag", "#Tag", "#Tag", "#Tag"],
@@ -444,12 +536,15 @@ Return ONLY valid JSON, no markdown, no code fences, in exactly this shape:
 The "carousel" array MUST contain EXACTLY ${n} slide object(s), no more and no fewer. Keep hashtags to 3 or 4 relevant, non-spammy tags. Keep reviewer_notes to 2 short items specific to THIS post. Remember: no em dashes anywhere.`;
 }
 
-function buildSystemPrompt(pillar, tone, words, lenLabel, slideCount) {
+function buildSystemPrompt(pillar, tone, words, lenLabel, slideCount, depth) {
   const n = Math.max(1, Math.min(5, slideCount || 5));
+  const depthId = DEPTH_BY_LEVEL[depth] ? depth : "deeper";
 
   // General (non-finance) pillars: no finance framing, no compliance block.
   if (pillar.general) {
     return `You are a ghostwriter creating fun, engaging, shareable social posts for a person's warm and human personal brand. This post is NOT about finance, money, investing, saving, or business, and must not drift into those topics or add a money "lesson", even if a topic is provided. Keep it genuinely entertaining, positive, inclusive, and clean. Anything you present as a fact must be true and verifiable.
+
+${DEPTH_GENERAL}
 
 ${VOICE_RULES}
 
@@ -472,6 +567,10 @@ NON-NEGOTIABLE COMPLIANCE RULES (spirit of SEC Marketing Rule 206(4)-1 and FINRA
 - NO superlatives or unverifiable claims ("best", "guaranteed", "the only", "risk-free").
 - NO fear-mongering or pressure. Balanced and fair.
 - Any real-world fact you cite must be accurate and verifiable; if unsure, choose a different fact.
+
+${DEPTH_CORE}
+
+${DEPTH_BY_LEVEL[depthId]}
 
 ${VOICE_RULES}
 
@@ -1151,10 +1250,16 @@ function drawBulletin(ctx, v) {
   const flagY = PAD - 20, flagH = 86;
   const label = String(kicker || "").toUpperCase().slice(0, 26);
   ctx.font = "600 28px " + f.label; setTracking(ctx, "4px");
-  const flagW = Math.min(560, ctx.measureText(label).width + PAD + 56);
-  ctx.fillStyle = accent; ctx.fillRect(0, flagY, flagW, flagH);
-  ctx.fillStyle = theme.chipInk; ctx.textAlign = "left";
-  ctx.fillText(label, PAD - 40, flagY + 55);
+  // With no section label the flag becomes a short accent rule instead of an
+  // empty colored box.
+  if (label) {
+    const flagW = Math.min(560, ctx.measureText(label).width + PAD + 56);
+    ctx.fillStyle = accent; ctx.fillRect(0, flagY, flagW, flagH);
+    ctx.fillStyle = theme.chipInk; ctx.textAlign = "left";
+    ctx.fillText(label, PAD - 40, flagY + 55);
+  } else {
+    ctx.fillStyle = accent; ctx.fillRect(0, flagY + 34, 190, 14);
+  }
   setTracking(ctx, "2px"); ctx.fillStyle = sub; ctx.textAlign = "right"; ctx.font = "500 26px " + f.label;
   ctx.fillText(String(i + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), W - PAD, flagY + 55);
   ctx.textAlign = "left"; setTracking(ctx, "0px");
@@ -1310,14 +1415,18 @@ function drawTicker(ctx, v) {
 // then the headline anchored low over a full-width rule. Magazine cover.
 // ---------------------------------------------------------------------------
 function drawCoverStory(ctx, v) {
-  const { W, H, PAD, slide, i, total, kind, kicker, ink, sub, line, accent, f } = v;
+  const { W, H, PAD, slide, i, total, kind, kicker, brand, ink, sub, line, accent, f } = v;
   const maxW = W - PAD * 2;
   const mastY = PAD + 66;
   ctx.textAlign = "center"; setTracking(ctx, "14px");
-  const mast = String(kicker || "The Desk").toUpperCase().slice(0, 18);
-  const mSize = fitOneLine(ctx, mast, maxW, "500 __SIZE__ " + f.head, 78, 34);
-  ctx.fillStyle = ink; ctx.font = "500 " + mSize + "px " + f.head;
-  ctx.fillText(mast, W / 2 + 7, mastY);
+  // The masthead carries the subject. Without one, the brand name stands in,
+  // since a magazine cover needs something across the top.
+  const mast = String(kicker || brand.name.split(",")[0] || "").toUpperCase().slice(0, 22);
+  if (mast) {
+    const mSize = fitOneLine(ctx, mast, maxW, "500 __SIZE__ " + f.head, 78, 30);
+    ctx.fillStyle = ink; ctx.font = "500 " + mSize + "px " + f.head;
+    ctx.fillText(mast, W / 2 + 7, mastY);
+  }
   setTracking(ctx, "0px");
   ctx.strokeStyle = line; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(PAD, mastY + 34); ctx.lineTo(W - PAD, mastY + 34); ctx.stroke();
@@ -2250,6 +2359,22 @@ function ContentDesk() {
   const [pillarId, setPillarId] = useState("fact");
   const [tone, setTone] = useState("Educator");
   const [lenIdx, setLenIdx] = useState(1);
+  // How far past the obvious to push, and whether to run the editor pass.
+  const [depth, setDepth] = useState(() => {
+    try { return localStorage.getItem("depth") || "deeper"; } catch (e) { return "deeper"; }
+  });
+  function saveDepth(v) {
+    setDepth(v);
+    try { localStorage.setItem("depth", v); } catch (e) {}
+  }
+  const [sharpen, setSharpen] = useState(() => {
+    try { return localStorage.getItem("sharpen") !== "0"; } catch (e) { return true; }
+  });
+  function saveSharpen(v) {
+    setSharpen(v);
+    try { localStorage.setItem("sharpen", v ? "1" : "0"); } catch (e) {}
+  }
+  const [sharpening, setSharpening] = useState(false);
   const [slideCount, setSlideCount] = useState(5);
   const [topic, setTopic] = useState("");
   const [themeId, setThemeId] = useState("ivory"); // user's choice (may be "surprise")
@@ -2383,10 +2508,29 @@ function ContentDesk() {
     () => ({ name: brandName.trim() || "Matthew Pindoley, SE-AWMA®", handle: brandHandle.trim() || "MatthewPindoley.com" }),
     [brandName, brandHandle]
   );
+  // The label at the top of a slide describes the subject, never the content
+  // category. The writer supplies it; the topic you typed is the backup; if
+  // neither exists the layouts simply leave it off.
+  const slideKicker = useMemo(() => {
+    const fromModel = String((result && result.kicker) || "").trim();
+    // A section label is a couple of words, so trim on word boundaries rather
+    // than chopping a sentence mid-syllable.
+    const fromTopic = String(topic || "").trim().split(/[.,\n]/)[0].split(/\s+/).slice(0, 3).join(" ");
+    const chosen = fromModel || fromTopic;
+    if (!chosen || PILLAR_WORDS.test(chosen)) return "";
+    const words = chosen.toUpperCase().split(/\s+/);
+    let out = "";
+    for (const w of words) {
+      if (out && (out + " " + w).length > 26) break;
+      out = out ? out + " " + w : w.slice(0, 26);
+    }
+    return out;
+  }, [result, topic]);
+
   const drawOpts = useMemo(
-    () => ({ theme, template: activeTemplate, kicker: pillar.label.toUpperCase(), brand,
+    () => ({ theme, template: activeTemplate, kicker: slideKicker, brand,
              fonts: resolveFonts(activeFontsId, activeTemplate) }),
-    [theme, activeTemplate, activeFontsId, pillar.label, brand]
+    [theme, activeTemplate, activeFontsId, slideKicker, brand]
   );
 
   // Picking a concrete layout updates the live preview immediately. "Surprise"
@@ -2480,7 +2624,7 @@ function ContentDesk() {
         ? `Topic / angle to use: "${liveTopic}". Generate the ${pillar.label} post and carousel around this.`
         : `No topic given, choose a fresh interesting one yourself. Generate the ${pillar.label} post and carousel.`;
       const userMsg = `${base}\n\n${spin} Make this draft distinctly different from anything generic. Variation token: ${nonce}.${avoid}`;
-      const system = buildSystemPrompt(pillar, tone, LEN_WORDS[lenIdx], LEN_LABELS[lenIdx], slideCount);
+      const system = buildSystemPrompt(pillar, tone, LEN_WORDS[lenIdx], LEN_LABELS[lenIdx], slideCount, depth);
       // Draft from a given writer, then parse its JSON.
       const draftOnce = async (writer) => {
         const raw = await draftWith(writer, system, userMsg);
@@ -2518,11 +2662,38 @@ function ContentDesk() {
         }
         throw new Error((lastErr && lastErr.message) ? ("Draft failed: " + lastErr.message) : "That draft did not come through cleanly. Try Generate again.");
       }
-      setWriterNote(usedWriter === textSource ? "" :
+      let note = usedWriter === textSource ? "" :
         ranOut.length
           ? ranOut.join(" and ") + " ran out of free requests, so " + WRITER_LABEL(usedWriter) + " wrote this one."
-          : WRITER_LABEL(textSource) + " could not write this one, so " + WRITER_LABEL(usedWriter) + " stepped in.");
+          : WRITER_LABEL(textSource) + " could not write this one, so " + WRITER_LABEL(usedWriter) + " stepped in.";
+
+      // Second pass: hand the draft back to the same writer as an editor. The
+      // first draft is already good, so any failure here keeps it rather than
+      // costing you the post.
+      if (sharpen) {
+        setSharpening(true);
+        try {
+          const raw = await draftWith(usedWriter, system, sharpenPrompt(parsed, !!pillar.general));
+          const cleaned = raw.replace(/```json|```/g, "").trim();
+          const better = cleanResult(JSON.parse(cleaned.slice(cleaned.indexOf("{"), cleaned.lastIndexOf("}") + 1)));
+          // Accept a rewrite only if it kept the shape of the draft it edited,
+          // so a sharper post never costs you slides.
+          const kept = better && better.hook && Array.isArray(better.carousel) &&
+                       better.carousel.length === (parsed.carousel || []).length;
+          if (kept) {
+            parsed = better;
+          } else {
+            note = (note ? note + " " : "") + "The second pass came back in the wrong shape, so this is the first draft.";
+          }
+        } catch (e) {
+          note = (note ? note + " " : "") +
+            (isLimitError(e) ? "No free requests left for the second pass, so this is the first draft."
+                             : "The second pass did not come through, so this is the first draft.");
+        }
+        setSharpening(false);
+      }
       setResult(parsed);
+      setWriterNote(note);
       // remember this hook so the next Generate avoids it
       recentRef.current = [parsed.hook, ...recentRef.current].filter(Boolean).slice(0, 10);
       // fire off photo generation (does not block the text from showing)
@@ -2986,6 +3157,21 @@ function ContentDesk() {
           </div>
           <div className="slider-note">{slideCount === 1 ? "One cover slide (a title, plus a photo if enabled)." : slideCount + " slides in the carousel."}</div>
 
+          <div className="ctrl-label">Depth <span className="opt">how far past the obvious</span></div>
+          <div className="tones">
+            {DEPTH_LEVELS.map((d) => (
+              <button key={d.id} className={"tone" + (d.id === depth ? " on" : "")} onClick={() => saveDepth(d.id)} title={d.note}>{d.label}</button>
+            ))}
+          </div>
+          <div className="slider-note">{(DEPTH_LEVELS.find((d) => d.id === depth) || {}).note}</div>
+          <label className="slider-note" style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", marginTop: 10 }}>
+            <input type="checkbox" checked={sharpen} onChange={(e) => saveSharpen(e.target.checked)} style={{ marginTop: 3 }} />
+            <span>
+              Second pass. The draft goes back to the writer as an editor to cut filler and push the
+              idea further. Much sharper, takes one extra request and a few more seconds.
+            </span>
+          </label>
+
           <div className="ctrl-label">Voice</div>
           <div className="tones">
             {TONES.map((t) => (
@@ -3098,7 +3284,7 @@ function ContentDesk() {
               <p>Pick a pillar and hit generate. Your draft proof lands here: the post on one tab, downloadable image slides on the other, with a live preview of the carousel right under the post.</p>
             </div>
           )}
-          {loading && (<div className="empty"><div className="empty-mark spin">&#9716;</div><p>Setting the type...</p></div>)}
+          {loading && (<div className="empty"><div className="empty-mark spin">&#9716;</div><p>{sharpening ? "Second pass, sharpening the draft..." : "Setting the type..."}</p></div>)}
           {error && (<div className="empty err"><div className="empty-mark">!</div><p>{error}</p></div>)}
 
           {result && writerNote && (
